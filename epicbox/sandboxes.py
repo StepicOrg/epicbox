@@ -100,7 +100,7 @@ def _inspect_container_state(container):
         duration_seconds = -1
     return {
         'duration': duration_seconds,
-        'oom_killed': container_info['State']['OOMKilled'],
+        'oom_killed': container_info['State'].get('OOMKilled', False),
     }
 
 
