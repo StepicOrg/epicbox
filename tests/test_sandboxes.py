@@ -72,7 +72,7 @@ def test_run_user_processes_limit(profile):
     assert b'fork: retry: No child processes' in result['stderr']
 
 
-def test_run_upload_files(profile, skip_if_remote_docker):
+def test_run_upload_files(skip_if_remote_docker, profile):
     files = [
         {'name': 'main.py', 'content': b'print(open("file.txt").read())'},
         {'name': 'file.txt', 'content': b'Data in file.txt'},
@@ -82,6 +82,18 @@ def test_run_upload_files(profile, skip_if_remote_docker):
 
     assert result['exit_code'] == 0
     assert result['stdout'] == b'Data in file.txt\n'
+
+
+def test_run_read_stdin(skip_if_remote_docker, profile):
+    result = run(profile.name, 'cat', stdin=b'binary data\n')
+
+    assert result['exit_code'] == 0
+    assert result['stdout'] == b'binary data\n'
+
+    result = run(profile.name, 'cat', stdin='utf8 данные\n')
+
+    assert result['exit_code'] == 0
+    assert result['stdout'] == 'utf8 данные\n'.encode()
 
 
 def test_start_sandbox_apierror_no_such_image():

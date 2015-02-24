@@ -19,10 +19,20 @@ __all__ = ['run', 'working_directory']
 logger = structlog.get_logger()
 
 
-def run(profile_name, command=None, files=[], limits=None, workdir=None):
+def run(profile_name, command=None, files=[], stdin=None, limits=None,
+        workdir=None):
     if profile_name not in config.PROFILES:
         raise ValueError("Profile not found: {0}".format(profile_name))
     profile = config.PROFILES[profile_name]
+    if stdin:
+        if not isinstance(stdin, (bytes, str)):
+            raise TypeError("stdin should be 'bytes' or 'str'")
+        stdin_content = stdin if isinstance(stdin, bytes) else stdin.encode()
+        if not files:
+            files = []
+        stdin_filename = '_sandbox_stdin'
+        files.append({'name': stdin_filename, 'content': stdin_content})
+        command = '< {0} {1}'.format(stdin_filename, command)
     limits = utils.merge_limits_defaults(limits)
     if limits['cputime']:
         command = 'ulimit -t {0}; {1}'.format(limits['cputime'], command)
