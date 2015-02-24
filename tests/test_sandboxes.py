@@ -6,7 +6,8 @@ import pytest
 
 from unittest.mock import ANY
 
-from epicbox.sandboxes import _start_sandbox, run, workdir
+from epicbox.sandboxes import run, working_directory, \
+                              _start_sandbox, _write_files
 
 
 def test_run_python(profile):
@@ -57,7 +58,7 @@ def test_run_cpu_timeout(profile):
 
 
 def test_run_memory_limit(profile):
-    result = run(profile.name, 'python -c "[1] * 10 ** 6"',
+    result = run(profile.name, 'python3 -c "[1] * 10 ** 6"',
                  limits={'cputime': 10, 'memory': 4})
 
     assert result['oom_killed'] is True
@@ -71,14 +72,42 @@ def test_run_user_processes_limit(profile):
     assert b'fork: retry: No child processes' in result['stderr']
 
 
+def test_run_upload_files(profile, skip_if_remote_docker):
+    files = [
+        {'name': 'main.py', 'content': b'print(open("file.txt").read())'},
+        {'name': 'file.txt', 'content': b'Data in file.txt'},
+    ]
+
+    result = run(profile.name, 'python3 main.py', files=files)
+
+    assert result['exit_code'] == 0
+    assert result['stdout'] == b'Data in file.txt\n'
+
+
 def test_start_sandbox_apierror_no_such_image():
     with pytest.raises(docker.errors.APIError) as excinfo:
         _start_sandbox('unknown_image', 'true', limits={'memory': 4})
     assert b'No such image' in excinfo.value.explanation
 
 
-def test_workdir():
-    with workdir() as sandbox_workdir:
-        assert os.stat(sandbox_workdir).st_mode & 0o777 == 0o777
-        assert os.listdir(sandbox_workdir) == []
-    assert not os.path.isdir(sandbox_workdir)
+def test_working_directory():
+    with working_directory() as workdir:
+        assert os.stat(workdir).st_mode & 0o777 == 0o777
+        assert os.listdir(workdir) == []
+    assert not os.path.isdir(workdir)
+
+
+def test_write_files():
+    files = [
+        {'name': 'main.py', 'content': b'main.py content'},
+        {'name': 'file.txt', 'content': b'file.txt content'},
+    ]
+
+    with working_directory() as workdir:
+        _write_files(files, workdir)
+
+        assert set(os.listdir(workdir)) == {'main.py', 'file.txt'}
+        mainpy_content = open(os.path.join(workdir, 'main.py'), 'rb').read()
+        assert mainpy_content == b'main.py content'
+        filetxt_content = open(os.path.join(workdir, 'file.txt'), 'rb').read()
+        assert filetxt_content == b'file.txt content'

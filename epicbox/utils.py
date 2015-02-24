@@ -8,8 +8,7 @@ def get_docker_client():
 
 
 def filter_filenames(files):
-    # TODO: extract only file names from the files list
-    return files
+    return [file['name'] for file in files if 'name' in file]
 
 
 def merge_limits_defaults(limits):

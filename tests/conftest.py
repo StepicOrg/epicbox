@@ -15,6 +15,13 @@ def docker_url(request):
 
 
 @pytest.fixture
+def skip_if_remote_docker():
+    from epicbox import config
+    if config.DOCKER_URL and 'unix:' not in config.DOCKER_URL:
+        pytest.skip("Skip because the test requires Docker running locally")
+
+
+@pytest.fixture
 def docker_image():
     # TODO: use the base stepic profile
     return 'sandbox-test'

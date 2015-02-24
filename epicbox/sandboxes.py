@@ -7,39 +7,66 @@ import dateutil.parser
 import structlog
 
 from contextlib import contextmanager
+from functools import partial
 
 from docker.errors import APIError, DockerException
 
 from . import config, utils
 
 
-__all__ = ['run', 'workdir']
+__all__ = ['run', 'working_directory']
 
 logger = structlog.get_logger()
 
 
 def run(profile_name, command=None, files=[], limits=None, workdir=None):
-    if workdir is None and not files:
-        if profile_name not in config.PROFILES:
-            raise ValueError("Profile not found: {0}".format(profile_name))
-        profile = config.PROFILES[profile_name]
-        limits = utils.merge_limits_defaults(limits)
-        if limits['cputime']:
-            command = 'ulimit -t {0}; {1}'.format(limits['cputime'], command)
-        if limits['numprocs']:
-            command = 'ulimit -u {0}; {1}'.format(limits['numprocs'], command)
-        command_list = ['/bin/sh', '-c', command]
-        return _start_sandbox(profile.docker_image, command_list,
-                              files=files, limits=limits, workdir=workdir,
-                              user=profile.user)
+    if profile_name not in config.PROFILES:
+        raise ValueError("Profile not found: {0}".format(profile_name))
+    profile = config.PROFILES[profile_name]
+    limits = utils.merge_limits_defaults(limits)
+    if limits['cputime']:
+        command = 'ulimit -t {0}; {1}'.format(limits['cputime'], command)
+    if limits['numprocs']:
+        command = 'ulimit -u {0}; {1}'.format(limits['numprocs'], command)
+    command_list = ['/bin/sh', '-c', command]
+
+    start_sandbox = partial(_start_sandbox, profile.docker_image, command_list,
+                            files=files, limits=limits, user=profile.user)
+    if files:
+        if workdir:
+            _write_files(files, workdir)
+            return start_sandbox(workdir=workdir)
+        with working_directory() as workdir:
+            _write_files(files, workdir)
+            return start_sandbox(workdir=workdir)
+    return start_sandbox()
 
 
 @contextmanager
-def workdir():
+def working_directory():
     with tempfile.TemporaryDirectory(prefix='sandbox-',
                                      dir=config.BASE_WORKDIR) as sandbox_dir:
         os.chmod(sandbox_dir, 0o777)
         yield sandbox_dir
+
+
+def _write_files(files, workdir):
+    log = logger.bind(files=utils.filter_filenames(files), workdir=workdir)
+    log.info("Writing files to the working directory")
+
+    files_written = []
+    for file in files:
+        filename = file.get('name')
+        if not filename or not isinstance(filename, str):
+            continue
+        filepath = os.path.join(workdir, filename)
+        content = file.get('content', b'')
+        with open(filepath, 'wb') as fd:
+            fd.write(content)
+        files_written.append(filename)
+
+    log.info("Successfully written files to the working directory",
+             files_written=files_written)
 
 
 def _get_container_output(container):
@@ -102,7 +129,12 @@ def _start_sandbox(image, command, files=[], limits=None, workdir=None,
     log = log.bind(container=c)
     log.info("Sandbox container created")
 
-    binds = None
+    binds = {
+        workdir: {
+            'bind': '/sandbox',
+            'ro': False,
+        }
+    } if workdir else None
     try:
         docker_client.start(c, binds=binds)
     except (IOError, APIError, DockerException):
