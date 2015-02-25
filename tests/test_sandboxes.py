@@ -96,6 +96,17 @@ def test_run_read_stdin(skip_if_remote_docker, profile):
     assert result['stdout'] == 'utf8 данные\n'.encode()
 
 
+def test_run_reuse_workdir(skip_if_remote_docker, profile):
+    with working_directory() as workdir:
+        run(profile.name, 'true',
+            files=[{'name': 'file', 'content': b'first run data\n'}],
+            workdir=workdir)
+        result = run(profile.name, 'cat file', workdir=workdir)
+
+        assert result['exit_code'] == 0
+        assert result['stdout'] == b'first run data\n'
+
+
 def test_start_sandbox_apierror_no_such_image():
     with pytest.raises(docker.errors.APIError) as excinfo:
         _start_sandbox('unknown_image', 'true', limits={'memory': 4})

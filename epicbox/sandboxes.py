@@ -42,7 +42,8 @@ def run(profile_name, command=None, files=[], stdin=None, limits=None,
     command_list = ['/bin/sh', '-c', command]
 
     start_sandbox = partial(_start_sandbox, profile.docker_image, command_list,
-                            files=files, limits=limits, user=profile.user)
+                            files=files, limits=limits, workdir=workdir,
+                            user=profile.user)
     if files:
         if workdir:
             _write_files(files, workdir)
