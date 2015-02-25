@@ -1,5 +1,6 @@
 import os
 import requests.exceptions
+import subprocess
 import tempfile
 import uuid
 
@@ -56,7 +57,16 @@ def run(profile_name, command=None, files=[], stdin=None, limits=None,
 def working_directory():
     with tempfile.TemporaryDirectory(prefix='sandbox-',
                                      dir=config.BASE_WORKDIR) as sandbox_dir:
+        log = logger.bind(workdir=sandbox_dir)
+        log.info("New working directory is created")
         os.chmod(sandbox_dir, 0o777)
+        if config.SELINUX_ENFORCED:
+            p = subprocess.Popen(
+                ['chcon', '-t', 'svirt_sandbox_file_t', sandbox_dir],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            if p.wait():
+                log.error("Failed to change the SELinux security context of "
+                          "the working directory", error=p.stdout.read().decode())
         yield sandbox_dir
 
 

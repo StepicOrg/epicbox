@@ -10,6 +10,7 @@ __all__ = ['Profile', 'configure']
 PROFILES = []
 DOCKER_URL = None
 BASE_WORKDIR = None
+SELINUX_ENFORCED = False
 
 DEFAULT_LIMITS = {
     # CPU time in seconds, None for unlimited
@@ -32,11 +33,13 @@ class Profile(object):
         self.docker_image = docker_image
         self.command = command
         self.user = user
+        # TODO: implement network configuration for sandbox containers
         self.network = network
 
 
-def configure(profiles=[], docker_url=None, base_workdir=None):
-    global PROFILES, DOCKER_URL, BASE_WORKDIR
+def configure(profiles=[], docker_url=None, base_workdir=None,
+              selinux_enforced=False):
+    global PROFILES, DOCKER_URL, BASE_WORKDIR, SELINUX_ENFORCED
 
     PROFILES = {profile.name: profile for profile in profiles}
     DOCKER_URL = docker_url
@@ -44,6 +47,7 @@ def configure(profiles=[], docker_url=None, base_workdir=None):
         BASE_WORKDIR = base_workdir
     else:
         BASE_WORKDIR = tempfile.gettempdir()
+    SELINUX_ENFORCED = selinux_enforced
 
 
 if not structlog._config._CONFIG.is_configured:
