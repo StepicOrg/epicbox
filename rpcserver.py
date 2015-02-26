@@ -48,7 +48,6 @@ def register_shutdown_handler(handler):
 
 def stop_server(rpc_server):
     """Attempt to stop the RPC server gracefully."""
-    # TODO: configure logging
     logger.info("Stopping RPC server...")
     try:
         rpc_server.stop()

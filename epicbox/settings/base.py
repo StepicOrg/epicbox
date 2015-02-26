@@ -16,7 +16,7 @@ DEBUG = True
 
 PROFILES = {
     'base': {
-        'docker_image': 'sandbox-test',
+        'docker_image': 'stepic/epicbox-base',
     }
 }
 DOCKER_URL = None
