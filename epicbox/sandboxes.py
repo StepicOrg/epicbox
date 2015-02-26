@@ -22,6 +22,12 @@ logger = structlog.get_logger()
 
 def run(profile_name, command=None, files=[], stdin=None, limits=None,
         workdir=None):
+    """Run a new sandbox container.
+
+    :raises DockerError: if an error occurred with the underlying
+                         docker system
+
+    """
     if profile_name not in config.PROFILES:
         raise ValueError("Profile not found: {0}".format(profile_name))
     profile = config.PROFILES[profile_name]
