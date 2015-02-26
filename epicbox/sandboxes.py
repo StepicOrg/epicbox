@@ -1,5 +1,4 @@
 import os
-import requests.exceptions
 import subprocess
 import tempfile
 import uuid
@@ -10,9 +9,10 @@ import structlog
 from contextlib import contextmanager
 from functools import partial
 
-from docker.errors import APIError, DockerException
+from docker.errors import DockerException
+from requests.exceptions import ReadTimeout, RequestException
 
-from . import config, utils
+from . import config, exceptions, utils
 
 
 __all__ = ['run', 'working_directory']
@@ -98,7 +98,7 @@ def _get_container_output(container):
             container, stdout=True, stderr=False, stream=False)
         stderr = docker_client.logs(
             container, stdout=False, stderr=True, stream=False)
-    except (IOError, DockerException):
+    except (RequestException, DockerException):
         logger.exception("Failed to get stdout/stderr of the container",
                          container=container)
         return b'', b''
@@ -109,7 +109,7 @@ def _inspect_container_state(container):
     docker_client = utils.get_docker_client()
     try:
         container_info = docker_client.inspect_container(container)
-    except (IOError, DockerException):
+    except (RequestException, DockerException):
         logger.exception("Failed to inspect the container",
                          container=container)
         return -1
@@ -144,9 +144,9 @@ def _start_sandbox(image, command, files=[], limits=None, workdir=None,
                                            mem_limit=mem_limit,
                                            name=name,
                                            working_dir='/sandbox')
-    except (IOError, APIError, DockerException):
+    except (RequestException, DockerException) as e:
         log.exception("Failed to create a sandbox container")
-        raise
+        raise exceptions.DockerError(str(e))
     log = log.bind(container=c)
     log.info("Sandbox container created")
 
@@ -158,9 +158,9 @@ def _start_sandbox(image, command, files=[], limits=None, workdir=None,
     } if workdir else None
     try:
         docker_client.start(c, binds=binds)
-    except (IOError, APIError, DockerException):
+    except (RequestException, DockerException) as e:
         log.exception("Failed to start the sandbox container")
-        raise
+        raise exceptions.DockerError(str(e))
     log.info("Sandbox started")
 
     log.info("Waiting until the sandbox container exits")
@@ -169,13 +169,13 @@ def _start_sandbox(image, command, files=[], limits=None, workdir=None,
     try:
         exit_code = docker_client.wait(c, timeout=limits['realtime'])
         log.info("Sandbox container exited", exit_code=exit_code)
-    except requests.exceptions.ReadTimeout:
+    except ReadTimeout:
         log.info("Sandbox realtime limit exceeded",
                  realtime=limits['realtime'])
         timeout = True
-    except:
+    except (RequestException, DockerException) as e:
         log.exception("Sandbox runtime error")
-        raise
+        raise exceptions.DockerError(str(e))
 
     result = {
         'exit_code': exit_code,
@@ -204,7 +204,7 @@ def _cleanup_sandbox(container):
     docker_client = utils.get_docker_client()
     try:
         docker_client.remove_container(container, v=True, force=True)
-    except (IOError, APIError, DockerException):
+    except (RequestException, DockerException):
         # TODO: handle 500 Driver aufs failed to remove root filesystem
         logger.exception("Failed to remove the sandbox container",
                          container=container)
