@@ -30,8 +30,7 @@ def skip_if_remote_docker():
 
 @pytest.fixture
 def docker_image():
-    # TODO: use the base stepic profile
-    return 'sandbox-test'
+    return 'stepic/epicbox-python'
 
 
 @pytest.fixture

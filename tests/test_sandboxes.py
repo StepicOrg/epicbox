@@ -1,11 +1,11 @@
 import os
 import time
 
-import docker.errors
 import pytest
 
 from unittest.mock import ANY
 
+from epicbox.exceptions import DockerError
 from epicbox.sandboxes import run, working_directory, \
                               _start_sandbox, _write_files
 
@@ -108,9 +108,10 @@ def test_run_reuse_workdir(skip_if_remote_docker, profile):
 
 
 def test_start_sandbox_apierror_no_such_image():
-    with pytest.raises(docker.errors.APIError) as excinfo:
+    with pytest.raises(DockerError) as excinfo:
         _start_sandbox('unknown_image', 'true', limits={'memory': 4})
-    assert b'No such image' in excinfo.value.explanation
+
+    assert "No such image" in str(excinfo.value)
 
 
 def test_working_directory():
