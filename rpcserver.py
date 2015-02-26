@@ -16,7 +16,7 @@ logger = structlog.get_logger()
 
 
 def configure():
-    logging.basicConfig(level=logging.INFO)1
+    logging.basicConfig(level=logging.INFO)
 
     if isinstance(settings.PROFILES, (tuple, list)):
         profiles = settings.PROFILES
