@@ -11,6 +11,9 @@ if PROFILES_FILE:
         PROFILES = json.load(fd)
 DOCKER_URL = get_env_variable('DOCKER_URL', DOCKER_URL)
 BASE_WORKDIR = get_env_variable('BASE_WORKDIR', BASE_WORKDIR)
-SELINUX_ENFORCED = get_env_variable('SELINUX_ENFORCED', SELINUX_ENFORCED)
+if get_env_variable('SELINUX_ENFORCED', 'false') == 'true':
+    SELINUX_ENFORCED = True
+else:
+    SELINUX_ENFORCED = False
 
 RPC_TRANSPORT_URL = get_env_variable('RPC_TRANSPORT_URL', RPC_TRANSPORT_URL)
