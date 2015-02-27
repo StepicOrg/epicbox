@@ -1,12 +1,12 @@
 import os
 
 
-def get_env_variable(var_name, default=None):
+def get_env_variable(var_name, default='_UNDEFINED_'):
     """Get the environment variable or raise exception."""
     try:
         return os.environ[var_name]
     except KeyError:
-        if default is not None:
+        if default != '_UNDEFINED_':
             return default
         error_msg = "Set the {} environment variable".format(var_name)
         raise KeyError(error_msg)
