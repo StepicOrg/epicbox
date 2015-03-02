@@ -6,6 +6,13 @@ EpicBox runs untrusted code in secure Docker based sandboxes.
 ```python
 import epicbox
 
+epicbox.configure(
+    profiles=[
+        epicbox.Profile('base', 'stepic/epicbox-base'),
+        epicbox.Profile('python', 'stepic/epicbox-python', network=True),
+    ],
+    selinux_enforced=True,
+)
 files = [{'name': 'main.py', 'content': b'print(42)\n'}]
 epicbox.run('python', 'python3 main.py', files=files, limits={'cputime': 1})
 ```
