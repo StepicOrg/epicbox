@@ -1,4 +1,5 @@
 # EpicBox
+EpicBox runs untrusted code in secure Docker based sandboxes.
 
 ## Usage
 
