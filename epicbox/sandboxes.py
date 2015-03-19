@@ -144,7 +144,7 @@ def _start_container(container, binds=None, retries=1):
         try:
             docker_client.start(container, binds=binds)
         except RequestException as e:
-            if "Error mounting" in str(e) and retries:
+            if "devicemapper" in str(e) and retries:
                 logger.info("Failed to start the container because of the race"
                             " with udev, retrying...",
                             container=container, retries=retries)
