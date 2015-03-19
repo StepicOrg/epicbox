@@ -17,7 +17,7 @@ logger = structlog.get_logger()
 class EpicBoxEndpoint(object):
     target = oslo_messaging.Target(version='0.1')
 
-    @oslo_messaging.expected_exceptions(EpicBoxError)
+    @oslo_messaging.expected_exceptions(ValueError, EpicBoxError)
     def run(self, ctxt, profile_name, command, files, stdin, limits, workdir):
         return run(profile_name, command=command, files=files, stdin=stdin,
                    limits=limits, workdir=workdir)

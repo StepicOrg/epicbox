@@ -131,6 +131,27 @@ def _inspect_container_state(container):
     }
 
 
+def _start_container(container, binds=None, retries=1):
+    """Start a container and handle a known race condition with udev.
+
+    Retry to start a container if races with devicemapper driver and
+    udev occur: https://github.com/docker/docker/issues/4036
+
+    """
+    docker_client = utils.get_docker_client()
+    while retries:
+        retries -= 1
+        try:
+            docker_client.start(container, binds=binds)
+        except RequestException as e:
+            if "Error mounting" in str(e) and retries:
+                logger.info("Failed to start the container because of the race"
+                            " with udev, retrying...",
+                            container=container, retries=retries)
+            else:
+                raise
+
+
 def _start_sandbox(image, command, files=[], limits=None, workdir=None,
                    user=None):
     # TODO: clean up a sandbox in case of errors (fallback/periodic task)
@@ -163,7 +184,7 @@ def _start_sandbox(image, command, files=[], limits=None, workdir=None,
         }
     } if workdir else None
     try:
-        docker_client.start(c, binds=binds)
+        _start_container(c, binds=binds, retries=10)
     except (RequestException, DockerException) as e:
         log.exception("Failed to start the sandbox container")
         raise exceptions.DockerError(str(e))
