@@ -1,11 +1,38 @@
 import oslo_messaging
 
+from contextlib import contextmanager
+
 from oslo_config import cfg
+from oslo_messaging.rpc.client import _client_opts
 
 from .rpc import RPCSerializer
 
 
 ALLOWED_EXMODS = ['epicbox.exceptions']
+
+
+def set_default_response_timeout(timeout):
+    """Set default timeout to wait for a response from a call.
+
+    Given timeout is applied for all rpc calls.
+
+    :param timeout: default timeout in seconds
+
+    """
+    cfg.CONF.register_opts(_client_opts)
+    cfg.CONF.set_default('rpc_response_timeout', timeout)
+
+
+@contextmanager
+def set_response_timeout(timeout):
+    """Context manager to set timeout to wait for a response from a call."""
+
+    current_timeout = cfg.CONF.rpc_response_timeout
+    set_default_response_timeout(timeout)
+    try:
+        yield
+    finally:
+        set_default_response_timeout(current_timeout)
 
 
 class EpicBoxAPI(object):
