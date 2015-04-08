@@ -9,6 +9,8 @@ import epicbox
 
 from functools import partial
 
+from oslo_config import cfg
+
 from epicbox import rpc, settings
 
 
@@ -32,6 +34,7 @@ def configure():
         base_workdir=settings.BASE_WORKDIR,
         selinux_enforced=settings.SELINUX_ENFORCED,
     )
+    cfg.CONF.rpc_acks_late = True
 
 
 def register_shutdown_handler(handler):
@@ -59,6 +62,8 @@ def stop_server(rpc_server):
 def main():
     configure()
     rpc_server = rpc.get_server(settings.RPC_TRANSPORT_URL)
+    cfg.CONF.oslo_messaging_rabbit.rabbit_prefetch_count = 1
+
     shutdown_handler = partial(stop_server, rpc_server)
     register_shutdown_handler(shutdown_handler)
     logger.info("Starting EpicBox RPC server...")
