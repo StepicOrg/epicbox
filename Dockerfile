@@ -2,7 +2,7 @@ FROM psviderski/centos-python3
 MAINTAINER Pavel Sviderski <ps@stepic.org>
 
 # Install requirements to be able to install oslo.messaging
-RUN yum install -y gcc python34u-devel \
+RUN yum install -y git gcc python34u-devel \
  && yum clean all
 
 ADD app.tar.gz /app
