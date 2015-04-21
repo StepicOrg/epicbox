@@ -39,7 +39,7 @@ def get_server(transport_url, fake=False):
         EpicBoxEndpoint(),
     ]
     return oslo_messaging.get_rpc_server(transport, target, endpoints,
-                                         executor='blocking',
+                                         executor='threading',
                                          serializer=RPCSerializer())
 
 
