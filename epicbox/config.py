@@ -19,8 +19,11 @@ DEFAULT_LIMITS = {
     'realtime': 5,
     # Memory in megabytes, None for unlimited
     'memory': 64,
-    # Maximum number of user processes, None for unlimited
-    'numprocs': None,
+
+    # Allow user process to fork
+    #'canfork': False,
+    # Limiting the maximum number of user processes in Linux is tricky.
+    # http://unix.stackexchange.com/questions/55319/are-limits-conf-values-applied-on-a-per-process-basis
 }
 DEFAULT_USER = 'sandbox'
 CPU_TO_REAL_TIME_FACTOR = 5

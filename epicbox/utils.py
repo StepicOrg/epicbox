@@ -1,3 +1,5 @@
+import signal
+
 import docker
 
 from . import config
@@ -32,3 +34,7 @@ def truncate_result(result):
                 v = v[:MAX_OUTPUT_LENGTH] + b' *** truncated ***'
         truncated[k] = v
     return truncated
+
+
+def is_killed_by_sigkill_or_sigxcpu(status):
+    return status - 128 in [signal.SIGKILL, signal.SIGXCPU]

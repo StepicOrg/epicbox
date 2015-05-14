@@ -1,6 +1,9 @@
 # EpicBox
 EpicBox runs untrusted code in secure Docker based sandboxes.
 
+## Requirements
+Docker version: `>=1.6.0`
+
 ## Usage
 
 ```python

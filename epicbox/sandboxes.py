@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from functools import partial
 
 from docker.errors import DockerException
+from docker.utils import Ulimit, create_host_config
 from requests.exceptions import ReadTimeout, RequestException
 
 from . import config, exceptions, utils
@@ -40,12 +41,8 @@ def run(profile_name, command=None, files=[], stdin=None, limits=None,
         stdin_filename = '_sandbox_stdin'
         files.append({'name': stdin_filename, 'content': stdin_content})
         command = '< {0} {1}'.format(stdin_filename, command)
-    limits = utils.merge_limits_defaults(limits)
-    if limits['cputime']:
-        command = 'ulimit -t {0}; {1}'.format(limits['cputime'], command)
-    if limits['numprocs']:
-        command = 'ulimit -u {0}; {1}'.format(limits['numprocs'], command)
     command_list = ['/bin/sh', '-c', command]
+    limits = utils.merge_limits_defaults(limits)
 
     start_sandbox = partial(_start_sandbox, profile.docker_image, command_list,
                             files=files, limits=limits, workdir=workdir,
@@ -131,7 +128,15 @@ def _inspect_container_state(container):
     }
 
 
-def _start_container(container, binds=None, retries=1):
+def _create_ulimits(limits):
+    ulimits = []
+    if limits['cputime']:
+        cpu = limits['cputime']
+        ulimits.append(Ulimit(name='cpu', soft=cpu, hard=cpu))
+    return ulimits or None
+
+
+def _start_container(container, retries=1):
     """Start a container and handle a known race condition with udev.
 
     Retry to start a container if races with devicemapper driver and
@@ -142,7 +147,7 @@ def _start_container(container, binds=None, retries=1):
     while retries:
         retries -= 1
         try:
-            docker_client.start(container, binds=binds)
+            return docker_client.start(container)
         except RequestException as e:
             if "devicemapper" in str(e) and retries:
                 logger.info("Failed to start the container because of the race"
@@ -159,6 +164,15 @@ def _start_sandbox(image, command, files=[], limits=None, workdir=None,
     name = 'sandbox-' + sandbox_id
     mem_limit = str(limits['memory']) + 'm'
 
+    binds = {
+        workdir: {
+            'bind': '/sandbox',
+            'ro': False,
+        }
+    } if workdir else None
+    ulimits = _create_ulimits(limits)
+    host_config = create_host_config(binds=binds, ulimits=ulimits)
+
     log = logger.bind(sandbox_id=sandbox_id)
     log.info("Starting new sandbox", image=image, command=command,
              files=utils.filter_filenames(files), limits=limits,
@@ -170,21 +184,15 @@ def _start_sandbox(image, command, files=[], limits=None, workdir=None,
                                            user=user,
                                            mem_limit=mem_limit,
                                            name=name,
-                                           working_dir='/sandbox')
+                                           working_dir='/sandbox',
+                                           host_config=host_config)
     except (RequestException, DockerException) as e:
         log.exception("Failed to create a sandbox container")
         raise exceptions.DockerError(str(e))
     log = log.bind(container=c)
     log.info("Sandbox container created")
-
-    binds = {
-        workdir: {
-            'bind': '/sandbox',
-            'ro': False,
-        }
-    } if workdir else None
     try:
-        _start_container(c, binds=binds, retries=10)
+        _start_container(c, retries=10)
     except (RequestException, DockerException) as e:
         log.exception("Failed to start the sandbox container")
         raise exceptions.DockerError(str(e))
@@ -216,8 +224,9 @@ def _start_sandbox(image, command, files=[], limits=None, workdir=None,
         result['stdout'], result['stderr'] = _get_container_output(c)
         state = _inspect_container_state(c)
         result.update(state)
-        if exit_code == 137 and not state['oom_killed']:
-            # SIGKILL is sent but not by out of memory killer
+        if (utils.is_killed_by_sigkill_or_sigxcpu(exit_code) and
+                not state['oom_killed']):
+            # SIGKILL/SIGXCPU is sent but not by out of memory killer
             result['timeout'] = True
     log.info("Sandbox run result", result=utils.truncate_result(result))
 

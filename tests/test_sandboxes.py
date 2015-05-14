@@ -65,8 +65,9 @@ def test_run_memory_limit(profile):
     assert result['timeout'] is False
 
 
-def test_run_user_processes_limit(profile):
-    result = run(profile.name, 'ls', limits={'numprocs': 1, 'cputime': 30})
+@pytest.mark.skipif('True')
+def test_run_fork_limit(profile):
+    result = run(profile.name, 'ls &', limits={'cputime': 30})
 
     assert result['exit_code']
     assert b'fork: retry: No child processes' in result['stderr']
@@ -109,7 +110,8 @@ def test_run_reuse_workdir(skip_if_remote_docker, profile):
 
 def test_start_sandbox_apierror_no_such_image():
     with pytest.raises(DockerError) as excinfo:
-        _start_sandbox('unknown_image', 'true', limits={'memory': 4})
+        _start_sandbox('unknown_image', 'true',
+                       limits={'cputime': 1, 'memory': 4})
 
     assert "No such image" in str(excinfo.value)
 
