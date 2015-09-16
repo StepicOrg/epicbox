@@ -31,13 +31,12 @@ CPU_TO_REAL_TIME_FACTOR = 5
 
 class Profile(object):
     def __init__(self, name, docker_image, command=None, user=DEFAULT_USER,
-                 network=False):
+                 network_disabled=True):
         self.name = name
         self.docker_image = docker_image
         self.command = command
         self.user = user
-        # TODO: implement network configuration for sandbox containers
-        self.network = network
+        self.network_disabled = network_disabled
 
 
 def configure(profiles=[], docker_url=None, base_workdir=None,

@@ -21,7 +21,7 @@ __all__ = ['run', 'working_directory']
 logger = structlog.get_logger()
 
 
-def run(profile_name, command=None, files=[], stdin=None, limits=None,
+def run(profile_name, command=None, files=None, stdin=None, limits=None,
         workdir=None):
     """Run a new sandbox container.
 
@@ -36,17 +36,17 @@ def run(profile_name, command=None, files=[], stdin=None, limits=None,
         if not isinstance(stdin, (bytes, str)):
             raise TypeError("stdin should be 'bytes' or 'str'")
         stdin_content = stdin if isinstance(stdin, bytes) else stdin.encode()
-        if not files:
-            files = []
         stdin_filename = '_sandbox_stdin'
+        files = files or []
         files.append({'name': stdin_filename, 'content': stdin_content})
         command = '< {0} {1}'.format(stdin_filename, command)
     command_list = ['/bin/sh', '-c', command]
     limits = utils.merge_limits_defaults(limits)
 
-    start_sandbox = partial(_start_sandbox, profile.docker_image, command_list,
-                            files=files, limits=limits, workdir=workdir,
-                            user=profile.user)
+    start_sandbox = partial(
+        _start_sandbox, profile.docker_image, command_list, files=files,
+        limits=limits, workdir=workdir, user=profile.user,
+        network_disabled=profile.network_disabled)
     if files:
         if workdir:
             _write_files(files, workdir)
@@ -69,8 +69,9 @@ def working_directory():
                 ['chcon', '-t', 'svirt_sandbox_file_t', sandbox_dir],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             if p.wait():
-                log.error("Failed to change the SELinux security context of "
-                          "the working directory", error=p.stdout.read().decode())
+                log.error(
+                    "Failed to change the SELinux security context of the "
+                    "working directory", error=p.stdout.read().decode())
         yield sandbox_dir
 
 
@@ -157,11 +158,12 @@ def _start_container(container, retries=1):
                 raise
 
 
-def _start_sandbox(image, command, files=[], limits=None, workdir=None,
-                   user=None):
+def _start_sandbox(image, command, files=None, limits=None, workdir=None,
+                   user=None, network_disabled=True):
     # TODO: clean up a sandbox in case of errors (fallback/periodic task)
     sandbox_id = str(uuid.uuid4())
     name = 'sandbox-' + sandbox_id
+    files = files or []
     mem_limit = str(limits['memory']) + 'm'
 
     binds = {
@@ -183,6 +185,7 @@ def _start_sandbox(image, command, files=[], limits=None, workdir=None,
                                            command=command,
                                            user=user,
                                            mem_limit=mem_limit,
+                                           network_disabled=network_disabled,
                                            name=name,
                                            working_dir='/sandbox',
                                            host_config=host_config)

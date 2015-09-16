@@ -73,6 +73,21 @@ def test_run_fork_limit(profile):
     assert b'fork: retry: No child processes' in result['stderr']
 
 
+def test_run_network_disabled(profile):
+    result = run(profile.name, 'curl http://173.194.116.160')  # google.com
+
+    assert b'Network is unreachable' in result['stderr']
+
+
+def test_run_network_enabled(profile):
+    profile.network_disabled = False
+
+    result = run(profile.name, 'curl http://173.194.116.160')
+
+    assert b'Network is unreachable' not in result['stderr']
+    assert result['exit_code'] == 0
+
+
 def test_run_upload_files(skip_if_remote_docker, profile):
     files = [
         {'name': 'main.py', 'content': b'print(open("file.txt").read())'},
