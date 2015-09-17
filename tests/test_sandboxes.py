@@ -125,8 +125,8 @@ def test_run_reuse_workdir(skip_if_remote_docker, profile):
 
 def test_start_sandbox_apierror_no_such_image():
     with pytest.raises(DockerError) as excinfo:
-        _start_sandbox('unknown_image', 'true',
-                       limits={'cputime': 1, 'memory': 4})
+        _start_sandbox('unknown_image', 'true', {'cputime': 1, 'memory': 64},
+                       '/tmp')
 
     assert "No such image" in str(excinfo.value)
 

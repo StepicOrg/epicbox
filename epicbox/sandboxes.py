@@ -30,6 +30,7 @@ def run(profile_name, command=None, files=None, stdin=None, limits=None,
 
     """
     if profile_name not in config.PROFILES:
+        # TODO: treat name as docker image
         raise ValueError("Profile not found: {0}".format(profile_name))
     profile = config.PROFILES[profile_name]
     if stdin:
@@ -44,9 +45,8 @@ def run(profile_name, command=None, files=None, stdin=None, limits=None,
     limits = utils.merge_limits_defaults(limits)
 
     start_sandbox = partial(
-        _start_sandbox, profile.docker_image, command_list, files=files,
-        limits=limits, workdir=workdir, user=profile.user,
-        network_disabled=profile.network_disabled)
+        _start_sandbox, profile.docker_image, command_list, limits, workdir,
+        user=profile.user, network_disabled=profile.network_disabled)
     if files:
         if workdir:
             _write_files(files, workdir)
@@ -158,12 +158,11 @@ def _start_container(container, retries=1):
                 raise
 
 
-def _start_sandbox(image, command, files=None, limits=None, workdir=None,
-                   user=None, network_disabled=True):
+def _start_sandbox(image, command, limits, workdir, user=None,
+                   network_disabled=True):
     # TODO: clean up a sandbox in case of errors (fallback/periodic task)
     sandbox_id = str(uuid.uuid4())
     name = 'sandbox-' + sandbox_id
-    files = files or []
     mem_limit = str(limits['memory']) + 'm'
 
     binds = {
@@ -176,9 +175,9 @@ def _start_sandbox(image, command, files=None, limits=None, workdir=None,
     host_config = create_host_config(binds=binds, ulimits=ulimits)
 
     log = logger.bind(sandbox_id=sandbox_id)
-    log.info("Starting new sandbox", image=image, command=command,
-             files=utils.filter_filenames(files), limits=limits,
-             workdir=workdir, name=name, user=user)
+    log.info("Starting new sandbox", name=name, image=image, command=command,
+             limits=limits, workdir=workdir, user=user,
+             network_disabled=network_disabled)
     docker_client = utils.get_docker_client()
     try:
         c = docker_client.create_container(image,
