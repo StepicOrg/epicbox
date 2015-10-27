@@ -7,7 +7,7 @@ import structlog._config
 __all__ = ['Profile', 'configure']
 
 
-PROFILES = []
+PROFILES = {}
 DOCKER_URL = None
 BASE_WORKDIR = None
 SELINUX_ENFORCED = False
@@ -39,11 +39,11 @@ class Profile(object):
         self.network_disabled = network_disabled
 
 
-def configure(profiles=[], docker_url=None, base_workdir=None,
+def configure(profiles=None, docker_url=None, base_workdir=None,
               selinux_enforced=False):
     global PROFILES, DOCKER_URL, BASE_WORKDIR, SELINUX_ENFORCED
 
-    PROFILES = {profile.name: profile for profile in profiles}
+    PROFILES = {profile.name: profile for profile in profiles or []}
     DOCKER_URL = docker_url
     if base_workdir is not None:
         BASE_WORKDIR = base_workdir
