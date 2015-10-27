@@ -58,7 +58,7 @@ def test_run_cpu_timeout(profile):
 
 
 def test_run_memory_limit(profile):
-    result = run(profile.name, 'python3 -c "[1] * 10 ** 6"',
+    result = run(profile.name, 'python3 -c "[1] * 10 ** 8"',
                  limits={'cputime': 10, 'memory': 4})
 
     assert result['oom_killed'] is True
