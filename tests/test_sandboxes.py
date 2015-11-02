@@ -38,6 +38,13 @@ def test_run_non_zero_exit(profile):
     assert result['exit_code'] == 1
 
 
+def test_run_profile_command(profile):
+    result = run(profile.name)
+
+    assert result['exit_code'] == 0
+    assert result['stdout'] == b'profile stdout\n'
+
+
 def test_run_real_timeout(profile):
     result = run(profile.name, 'sleep 100', limits={'realtime': 1})
 

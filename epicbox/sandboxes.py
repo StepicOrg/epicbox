@@ -33,6 +33,7 @@ def run(profile_name, command=None, files=None, stdin=None, limits=None,
         # TODO: treat name as docker image
         raise ValueError("Profile not found: {0}".format(profile_name))
     profile = config.PROFILES[profile_name]
+    command = command or profile.command or 'true'
     if stdin:
         if not isinstance(stdin, (bytes, str)):
             raise TypeError("stdin should be 'bytes' or 'str'")

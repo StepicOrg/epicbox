@@ -46,7 +46,8 @@ def docker_image():
 
 @pytest.fixture
 def profile(docker_image):
-    return epicbox.Profile('python', docker_image)
+    return epicbox.Profile('python', docker_image,
+                           command='python3 -c \'print("profile stdout")\'')
 
 
 @pytest.fixture(autouse=True)
