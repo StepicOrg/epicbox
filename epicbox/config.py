@@ -43,7 +43,11 @@ def configure(profiles=None, docker_url=None, base_workdir=None,
               selinux_enforced=False):
     global PROFILES, DOCKER_URL, BASE_WORKDIR, SELINUX_ENFORCED
 
-    PROFILES = {profile.name: profile for profile in profiles or []}
+    if isinstance(profiles, dict):
+        PROFILES = {name: Profile(name, **profile_kwargs)
+                    for name, profile_kwargs in profiles.items()}
+    else:
+        PROFILES = {profile.name: profile for profile in profiles or []}
     DOCKER_URL = docker_url
     if base_workdir is not None:
         BASE_WORKDIR = base_workdir
