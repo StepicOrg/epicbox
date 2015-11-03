@@ -70,6 +70,7 @@ def test_run_memory_limit(profile):
 
     assert result['oom_killed'] is True
     assert result['timeout'] is False
+    assert result['exit_code'] not in [None, 0]
 
 
 @pytest.mark.skipif('True')

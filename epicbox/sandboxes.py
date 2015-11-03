@@ -46,15 +46,15 @@ def run(profile_name, command=None, files=None, stdin=None, limits=None,
     limits = utils.merge_limits_defaults(limits)
 
     start_sandbox = partial(
-        _start_sandbox, profile.docker_image, command_list, limits, workdir,
-        user=profile.user, network_disabled=profile.network_disabled)
+        _start_sandbox, profile.docker_image, command_list, limits,
+        workdir=workdir, user=profile.user,
+        network_disabled=profile.network_disabled)
     if files:
-        if workdir:
-            _write_files(files, workdir)
-            return start_sandbox(workdir=workdir)
-        with working_directory() as workdir:
-            _write_files(files, workdir)
-            return start_sandbox(workdir=workdir)
+        if not workdir:
+            with working_directory() as workdir:
+                _write_files(files, workdir)
+                return start_sandbox(workdir=workdir)
+        _write_files(files, workdir)
     return start_sandbox()
 
 
@@ -159,7 +159,7 @@ def _start_container(container, retries=1):
                 raise
 
 
-def _start_sandbox(image, command, limits, workdir, user=None,
+def _start_sandbox(image, command, limits, workdir=None, user=None,
                    network_disabled=True):
     # TODO: clean up a sandbox in case of errors (fallback/periodic task)
     sandbox_id = str(uuid.uuid4())
