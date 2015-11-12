@@ -7,6 +7,7 @@ import structlog._config
 __all__ = ['Profile', 'configure']
 
 
+IS_CONFIGURED = False
 PROFILES = {}
 DOCKER_URL = None
 BASE_WORKDIR = None
@@ -41,8 +42,9 @@ class Profile(object):
 
 def configure(profiles=None, docker_url=None, base_workdir=None,
               selinux_enforced=False):
-    global PROFILES, DOCKER_URL, BASE_WORKDIR, SELINUX_ENFORCED
+    global IS_CONFIGURED, PROFILES, DOCKER_URL, BASE_WORKDIR, SELINUX_ENFORCED
 
+    IS_CONFIGURED = True
     if isinstance(profiles, dict):
         PROFILES = {name: Profile(name, **profile_kwargs)
                     for name, profile_kwargs in profiles.items()}
