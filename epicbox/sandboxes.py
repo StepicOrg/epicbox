@@ -70,10 +70,23 @@ def working_directory():
                 ['chcon', '-t', 'svirt_sandbox_file_t', sandbox_dir],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             if p.wait():
-                log.error(
-                    "Failed to change the SELinux security context of the "
-                    "working directory", error=p.stdout.read().decode())
+                stdout = p.stdout.read().decode(errors='replace')
+                log.error("Failed to change the SELinux security context of "
+                          "the working directory", error=stdout)
         yield sandbox_dir
+        # Cleaning up all files in the sandbox directory, they may have
+        # arbitrary owners and permissions, so use sudo with a special
+        # cleanup script
+        if os.path.exists(config.CLEANUP_EXECUTABLE):
+            p = subprocess.Popen(
+                ['sudo', config.CLEANUP_EXECUTABLE, sandbox_dir],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            if p.wait():
+                log.error("Failed to cleanup the working directory",
+                          error=p.stdout.read().decode(errors='replace'))
+        else:
+            log.warning("Cleanup executable wasn't found. The working "
+                        "directory may not be removed correctly.")
 
 
 def _write_files(files, workdir):
