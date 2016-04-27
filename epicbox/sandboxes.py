@@ -186,7 +186,8 @@ def _start_sandbox(image, command, limits, workdir=None, user=None,
         }
     } if workdir else None
     ulimits = _create_ulimits(limits)
-    host_config = create_host_config(binds=binds, ulimits=ulimits)
+    host_config = create_host_config(binds=binds, mem_limit=mem_limit,
+                                     ulimits=ulimits)
 
     log = logger.bind(sandbox_id=sandbox_id)
     log.info("Starting new sandbox", name=name, image=image, command=command,
@@ -197,7 +198,6 @@ def _start_sandbox(image, command, limits, workdir=None, user=None,
         c = docker_client.create_container(image,
                                            command=command,
                                            user=user,
-                                           mem_limit=mem_limit,
                                            network_disabled=network_disabled,
                                            name=name,
                                            working_dir='/sandbox',
