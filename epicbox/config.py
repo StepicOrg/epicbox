@@ -10,9 +10,9 @@ __all__ = ['Profile', 'configure']
 IS_CONFIGURED = False
 PROFILES = {}
 DOCKER_URL = None
+DOCKER_WORKDIR = '/sandbox'
 BASE_WORKDIR = None
 SELINUX_ENFORCED = False
-CLEANUP_EXECUTABLE = '/usr/local/bin/epicbox_cleanup'
 
 DEFAULT_LIMITS = {
     # CPU time in seconds, None for unlimited
@@ -42,9 +42,8 @@ class Profile(object):
 
 
 def configure(profiles=None, docker_url=None, base_workdir=None,
-              selinux_enforced=False, cleanup_executable=None):
+              selinux_enforced=False):
     global IS_CONFIGURED, PROFILES, DOCKER_URL, BASE_WORKDIR, SELINUX_ENFORCED
-    global CLEANUP_EXECUTABLE
 
     IS_CONFIGURED = True
     if isinstance(profiles, dict):
@@ -58,8 +57,6 @@ def configure(profiles=None, docker_url=None, base_workdir=None,
     else:
         BASE_WORKDIR = tempfile.gettempdir()
     SELINUX_ENFORCED = selinux_enforced
-    if cleanup_executable is not None:
-        CLEANUP_EXECUTABLE = cleanup_executable
 
 
 if not structlog._config._CONFIG.is_configured:

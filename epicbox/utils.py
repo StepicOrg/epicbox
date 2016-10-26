@@ -5,8 +5,21 @@ import docker
 from . import config
 
 
-def get_docker_client():
-    return docker.Client(base_url=config.DOCKER_URL)
+def get_docker_client(base_url=None):
+    return docker.Client(base_url=base_url or config.DOCKER_URL)
+
+
+def is_docker_swarm(client):
+    """Check if the client connected to a Docker Swarm cluster."""
+    docker_version = client.version()['Version']
+    return docker_version.startswith('swarm')
+
+
+def get_swarm_nodes(client):
+    system_status = client.info()['SystemStatus']
+    if not system_status:
+        return []
+    return list(map(lambda node: node[0].strip(), system_status[4::9]))
 
 
 def filter_filenames(files):

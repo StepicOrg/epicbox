@@ -1,10 +1,12 @@
-import os
 import time
+import uuid
 
+import docker.errors
 import pytest
 
 from unittest.mock import ANY
 
+from epicbox import config, utils
 from epicbox.exceptions import DockerError
 from epicbox.sandboxes import run, working_directory, \
                               _start_sandbox, _write_files
@@ -30,6 +32,13 @@ def test_run_python(profile):
 def test_run_unknown_profile():
     with pytest.raises(ValueError):
         run('unknown', 'true')
+
+
+def test_run_invalid_workdir(profile):
+    with pytest.raises(ValueError) as excinfo:
+        run(profile.name, 'true', workdir='dir')
+
+    assert "working_directory" in str(excinfo.value)
 
 
 def test_run_non_zero_exit(profile):
@@ -66,7 +75,7 @@ def test_run_cpu_timeout(profile):
 
 def test_run_memory_limit(profile):
     result = run(profile.name, 'python3 -c "[1] * 10 ** 8"',
-                 limits={'cputime': 10, 'memory': 4})
+                 limits={'cputime': 10, 'memory': 8})
 
     assert result['oom_killed'] is True
     assert result['timeout'] is False
@@ -82,21 +91,22 @@ def test_run_fork_limit(profile):
 
 
 def test_run_network_disabled(profile):
-    result = run(profile.name, 'curl http://173.194.116.160')  # google.com
+    result = run(profile.name, 'curl -I https://google.com')
 
-    assert b'Network is unreachable' in result['stderr']
+    assert result['exit_code']
+    assert b'Could not resolve host' in result['stderr']
 
 
 def test_run_network_enabled(profile):
     profile.network_disabled = False
 
-    result = run(profile.name, 'curl http://173.194.116.160')
+    result = run(profile.name, 'curl -I https://google.com')
 
-    assert b'Network is unreachable' not in result['stderr']
     assert result['exit_code'] == 0
+    assert b'302 Found' in result['stdout']
 
 
-def test_run_upload_files(skip_if_remote_docker, profile):
+def test_run_upload_files(profile):
     files = [
         {'name': 'main.py', 'content': b'print(open("file.txt").read())'},
         {'name': 'file.txt', 'content': b'Data in file.txt'},
@@ -108,7 +118,7 @@ def test_run_upload_files(skip_if_remote_docker, profile):
     assert result['stdout'] == b'Data in file.txt\n'
 
 
-def test_run_read_stdin(skip_if_remote_docker, profile):
+def test_run_read_stdin(profile):
     result = run(profile.name, 'cat', stdin=b'binary data\n')
 
     assert result['exit_code'] == 0
@@ -120,11 +130,17 @@ def test_run_read_stdin(skip_if_remote_docker, profile):
     assert result['stdout'] == 'utf8 данные\n'.encode()
 
 
-def test_run_reuse_workdir(skip_if_remote_docker, profile):
+def test_run_reuse_workdir(profile, docker_client):
     with working_directory() as workdir:
+        assert workdir.node is None
+
         run(profile.name, 'true',
             files=[{'name': 'file', 'content': b'first run data\n'}],
             workdir=workdir)
+
+        if utils.is_docker_swarm(docker_client):
+            assert workdir.node
+
         result = run(profile.name, 'cat file', workdir=workdir)
 
         assert result['exit_code'] == 0
@@ -136,27 +152,49 @@ def test_start_sandbox_apierror_no_such_image():
         _start_sandbox('unknown_image', 'true', {'cputime': 1, 'memory': 64},
                        '/tmp')
 
-    assert "No such image" in str(excinfo.value)
+    error = str(excinfo.value)
+    # Error message depends on whether Docker Swarm is used
+    assert any(("No such image" in error, "not found" in error))
 
 
-def test_working_directory():
+def test_working_directory(docker_client):
     with working_directory() as workdir:
-        assert os.stat(workdir).st_mode & 0o777 == 0o777
-        assert os.listdir(workdir) == []
-    assert not os.path.isdir(workdir)
+        assert workdir.volume.startswith('epicbox-')
+        node_volume = workdir.volume
+        if utils.is_docker_swarm(docker_client):
+            node_name = utils.get_swarm_nodes(docker_client)[0]
+            node_volume = node_name + '/' + workdir.volume
+        volume = docker_client.inspect_volume(node_volume)
+        assert volume['Name'] == workdir.volume
+
+    with pytest.raises(docker.errors.NotFound):
+        docker_client.inspect_volume(node_volume)
 
 
-def test_write_files():
+def test_write_files(docker_client, docker_image):
+    command = ('/bin/bash -c '
+               '"stat -c %a /sandbox && ls -1 /sandbox && cat /sandbox/*"')
+    name = 'epicbox-test-' + str(uuid.uuid4())
+    working_dir = config.DOCKER_WORKDIR
+    container = docker_client.create_container(docker_image,
+                                               command=command,
+                                               name=name,
+                                               working_dir=working_dir)
     files = [
         {'name': 'main.py', 'content': b'main.py content'},
         {'name': 'file.txt', 'content': b'file.txt content'},
     ]
 
-    with working_directory() as workdir:
-        _write_files(files, workdir)
+    try:
+        _write_files(container, files)
 
-        assert set(os.listdir(workdir)) == {'main.py', 'file.txt'}
-        mainpy_content = open(os.path.join(workdir, 'main.py'), 'rb').read()
-        assert mainpy_content == b'main.py content'
-        filetxt_content = open(os.path.join(workdir, 'file.txt'), 'rb').read()
-        assert filetxt_content == b'file.txt content'
+        docker_client.start(container)
+        docker_client.wait(container, timeout=5)
+        stdout = docker_client.logs(
+            container, stdout=True, stderr=False, stream=False)
+        assert stdout == (b'755\n'
+                          b'file.txt\n'
+                          b'main.py\n'
+                          b'file.txt contentmain.py content\n')
+    finally:
+        docker_client.remove_container(container, v=True, force=True)
