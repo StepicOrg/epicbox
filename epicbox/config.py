@@ -27,7 +27,7 @@ DEFAULT_LIMITS = {
     # Limiting the maximum number of user processes in Linux is tricky.
     # http://unix.stackexchange.com/questions/55319/are-limits-conf-values-applied-on-a-per-process-basis
 }
-DEFAULT_USER = 'sandbox'
+DEFAULT_USER = 'root'
 CPU_TO_REAL_TIME_FACTOR = 5
 
 
