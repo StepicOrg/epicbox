@@ -52,7 +52,7 @@ def run(profile_name, command=None, files=None, stdin=None, limits=None,
     start_sandbox = partial(
         _start_sandbox, profile.docker_image, command_list, limits,
         files=files, workdir=workdir, user=profile.user,
-        network_disabled=profile.network_disabled)
+        read_only=profile.read_only, network_disabled=profile.network_disabled)
     if files and not workdir:
         with working_directory() as workdir:
             return start_sandbox(workdir=workdir)
@@ -187,7 +187,7 @@ def _create_ulimits(limits):
 
 
 def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
-                   network_disabled=True):
+                   read_only=False, network_disabled=True):
     # TODO: clean up a sandbox in case of errors (fallback/periodic task)
     sandbox_id = str(uuid.uuid4())
     name = 'epicbox-' + sandbox_id
@@ -202,6 +202,7 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
     ulimits = _create_ulimits(limits)
     docker_client = utils.get_docker_client()
     host_config = docker_client.create_host_config(binds=binds,
+                                                   read_only=read_only,
                                                    mem_limit=mem_limit,
                                                    ulimits=ulimits)
     environment = None
@@ -212,7 +213,7 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
     log = logger.bind(sandbox_id=sandbox_id)
     log.info("Starting new sandbox", name=name, image=image, command=command,
              limits=limits, workdir=workdir, user=user,
-             network_disabled=network_disabled)
+             read_only=read_only, network_disabled=network_disabled)
     try:
         c = docker_client.create_container(image,
                                            command=command,

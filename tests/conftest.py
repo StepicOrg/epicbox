@@ -44,9 +44,16 @@ def profile(docker_image):
                            command='python3 -c \'print("profile stdout")\'')
 
 
+@pytest.fixture
+def profile_read_only(docker_image):
+    return epicbox.Profile('python_read_only', docker_image,
+                           command='python3 -c \'print("profile stdout")\'',
+                           read_only=True)
+
+
 @pytest.fixture(autouse=True)
-def configure(profile, docker_url, selinux_enforced, base_workdir):
-    epicbox.configure(profiles=[profile],
+def configure(profile, profile_read_only, docker_url, base_workdir):
+    epicbox.configure(profiles=[profile, profile_read_only],
                       docker_url=docker_url,
                       selinux_enforced=selinux_enforced,
                       base_workdir=base_workdir)

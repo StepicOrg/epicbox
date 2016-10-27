@@ -33,11 +33,12 @@ CPU_TO_REAL_TIME_FACTOR = 5
 
 class Profile(object):
     def __init__(self, name, docker_image, command=None, user=DEFAULT_USER,
-                 network_disabled=True):
+                 read_only=False, network_disabled=True):
         self.name = name
         self.docker_image = docker_image
         self.command = command
         self.user = user
+        self.read_only = read_only
         self.network_disabled = network_disabled
 
 

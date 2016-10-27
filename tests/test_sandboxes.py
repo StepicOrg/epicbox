@@ -82,6 +82,13 @@ def test_run_memory_limit(profile):
     assert result['exit_code'] not in [None, 0]
 
 
+def test_run_read_only_file_system(profile_read_only):
+    result = run(profile_read_only.name, 'touch /tmp/file')
+
+    assert result['exit_code'] not in [None, 0]
+    assert b'Read-only file system' in result['stderr']
+
+
 @pytest.mark.skipif('True')
 def test_run_fork_limit(profile):
     result = run(profile.name, 'ls &', limits={'cputime': 30})
