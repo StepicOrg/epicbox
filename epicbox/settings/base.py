@@ -21,6 +21,5 @@ PROFILES = {
 }
 DOCKER_URL = None
 BASE_WORKDIR = None
-SELINUX_ENFORCED = False
 
 RPC_TRANSPORT_URL = 'rabbit://guest:guest@localhost:5672//'

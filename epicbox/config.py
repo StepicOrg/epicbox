@@ -12,7 +12,6 @@ PROFILES = {}
 DOCKER_URL = None
 DOCKER_WORKDIR = '/sandbox'
 BASE_WORKDIR = None
-SELINUX_ENFORCED = False
 
 DEFAULT_LIMITS = {
     # CPU time in seconds, None for unlimited
@@ -42,9 +41,8 @@ class Profile(object):
         self.network_disabled = network_disabled
 
 
-def configure(profiles=None, docker_url=None, base_workdir=None,
-              selinux_enforced=False):
-    global IS_CONFIGURED, PROFILES, DOCKER_URL, BASE_WORKDIR, SELINUX_ENFORCED
+def configure(profiles=None, docker_url=None, base_workdir=None):
+    global IS_CONFIGURED, PROFILES, DOCKER_URL, BASE_WORKDIR
 
     IS_CONFIGURED = True
     if isinstance(profiles, dict):
@@ -57,7 +55,6 @@ def configure(profiles=None, docker_url=None, base_workdir=None,
         BASE_WORKDIR = base_workdir
     else:
         BASE_WORKDIR = tempfile.gettempdir()
-    SELINUX_ENFORCED = selinux_enforced
 
 
 if not structlog._config._CONFIG.is_configured:
