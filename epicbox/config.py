@@ -10,9 +10,8 @@ __all__ = ['Profile', 'configure']
 IS_CONFIGURED = False
 PROFILES = {}
 DOCKER_URL = None
+DOCKER_WORKDIR = '/sandbox'
 BASE_WORKDIR = None
-SELINUX_ENFORCED = False
-CLEANUP_EXECUTABLE = '/usr/local/bin/epicbox_cleanup'
 
 DEFAULT_LIMITS = {
     # CPU time in seconds, None for unlimited
@@ -27,39 +26,36 @@ DEFAULT_LIMITS = {
     # Limiting the maximum number of user processes in Linux is tricky.
     # http://unix.stackexchange.com/questions/55319/are-limits-conf-values-applied-on-a-per-process-basis
 }
-DEFAULT_USER = 'sandbox'
+DEFAULT_USER = 'root'
 CPU_TO_REAL_TIME_FACTOR = 5
 
 
 class Profile(object):
     def __init__(self, name, docker_image, command=None, user=DEFAULT_USER,
-                 network_disabled=True):
+                 read_only=False, network_disabled=True):
         self.name = name
         self.docker_image = docker_image
         self.command = command
         self.user = user
+        self.read_only = read_only
         self.network_disabled = network_disabled
 
 
-def configure(profiles=None, docker_url=None, base_workdir=None,
-              selinux_enforced=False, cleanup_executable=None):
-    global IS_CONFIGURED, PROFILES, DOCKER_URL, BASE_WORKDIR, SELINUX_ENFORCED
-    global CLEANUP_EXECUTABLE
+def configure(profiles=None, docker_url=None, base_workdir=None):
+    global IS_CONFIGURED, PROFILES, DOCKER_URL, BASE_WORKDIR
 
     IS_CONFIGURED = True
     if isinstance(profiles, dict):
-        PROFILES = {name: Profile(name, **profile_kwargs)
-                    for name, profile_kwargs in profiles.items()}
+        profiles_map = {name: Profile(name, **profile_kwargs)
+                        for name, profile_kwargs in profiles.items()}
     else:
-        PROFILES = {profile.name: profile for profile in profiles or []}
+        profiles_map = {profile.name: profile for profile in profiles or []}
+    PROFILES.update(profiles_map)
     DOCKER_URL = docker_url
     if base_workdir is not None:
         BASE_WORKDIR = base_workdir
     else:
         BASE_WORKDIR = tempfile.gettempdir()
-    SELINUX_ENFORCED = selinux_enforced
-    if cleanup_executable is not None:
-        CLEANUP_EXECUTABLE = cleanup_executable
 
 
 if not structlog._config._CONFIG.is_configured:

@@ -1,6 +1,6 @@
-import os
-import subprocess
-import tempfile
+import io
+import tarfile
+import time
 import uuid
 
 import dateutil.parser
@@ -9,8 +9,8 @@ import structlog
 from contextlib import contextmanager
 from functools import partial
 
-from docker.errors import DockerException
-from docker.utils import Ulimit, create_host_config
+from docker.errors import DockerException, NotFound
+from docker.utils import Ulimit
 from requests.exceptions import ReadTimeout, RequestException
 
 from . import config, exceptions, utils
@@ -32,6 +32,9 @@ def run(profile_name, command=None, files=None, stdin=None, limits=None,
     if profile_name not in config.PROFILES:
         # TODO: treat name as docker image
         raise ValueError("Profile not found: {0}".format(profile_name))
+    if workdir is not None and not isinstance(workdir, _WorkingDirectory):
+        raise ValueError("Invalid `workdir`, it should be created using "
+                         "`working_directory` context manager")
     profile = config.PROFILES[profile_name]
     command = command or profile.command or 'true'
     if stdin:
@@ -41,69 +44,87 @@ def run(profile_name, command=None, files=None, stdin=None, limits=None,
         stdin_filename = '_sandbox_stdin'
         files = files or []
         files.append({'name': stdin_filename, 'content': stdin_content})
+        # TODO: write to stdin using attach API
         command = '< {0} {1}'.format(stdin_filename, command)
     command_list = ['/bin/sh', '-c', command]
     limits = utils.merge_limits_defaults(limits)
 
     start_sandbox = partial(
         _start_sandbox, profile.docker_image, command_list, limits,
-        workdir=workdir, user=profile.user,
-        network_disabled=profile.network_disabled)
-    if files:
-        if not workdir:
-            with working_directory() as workdir:
-                _write_files(files, workdir)
-                return start_sandbox(workdir=workdir)
-        _write_files(files, workdir)
+        files=files, workdir=workdir, user=profile.user,
+        read_only=profile.read_only, network_disabled=profile.network_disabled)
+    if files and not workdir:
+        with working_directory() as workdir:
+            return start_sandbox(workdir=workdir)
     return start_sandbox()
+
+
+class _WorkingDirectory(object):
+    """Represent a Docker volume used as a working directory.
+
+    Not intended to be instantiated by yourself.
+
+    """
+    def __init__(self, volume, node=None):
+        self.volume = volume
+        self.node = node
+
+    def __repr__(self):
+        return "WorkingDirectory(volume={!r}, node={!r})".format(self.volume,
+                                                                 self.node)
 
 
 @contextmanager
 def working_directory():
-    with tempfile.TemporaryDirectory(prefix='sandbox-',
-                                     dir=config.BASE_WORKDIR) as sandbox_dir:
-        log = logger.bind(workdir=sandbox_dir)
-        log.info("New working directory is created")
-        os.chmod(sandbox_dir, 0o777)
-        if config.SELINUX_ENFORCED:
-            p = subprocess.Popen(
-                ['chcon', '-t', 'svirt_sandbox_file_t', sandbox_dir],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            if p.wait():
-                stdout = p.stdout.read().decode(errors='replace')
-                log.error("Failed to change the SELinux security context of "
-                          "the working directory", error=stdout)
-        yield sandbox_dir
-        # Cleaning up all files in the sandbox directory, they may have
-        # arbitrary owners and permissions, so use sudo with a special
-        # cleanup script
-        if os.path.exists(config.CLEANUP_EXECUTABLE):
-            p = subprocess.Popen(
-                ['sudo', config.CLEANUP_EXECUTABLE, sandbox_dir],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            if p.wait():
-                log.error("Failed to cleanup the working directory",
-                          error=p.stdout.read().decode(errors='replace'))
-        else:
-            log.warning("Cleanup executable wasn't found. The working "
-                        "directory may not be removed correctly.")
+    docker_client = utils.get_docker_client()
+    volume_name = 'epicbox-' + str(uuid.uuid4())
+    log = logger.bind(volume=volume_name)
+    log.info("Creating new docker volume for working directory")
+    try:
+        docker_client.create_volume(volume_name)
+    except (RequestException, DockerException) as e:
+        log.exception("Failed to create a docker volume")
+        raise exceptions.DockerError(str(e))
+    log.info("New docker volume is created")
+
+    yield _WorkingDirectory(volume=volume_name, node=None)
+
+    log.info("Removing the docker volume")
+    try:
+        docker_client.remove_volume(volume_name)
+    except NotFound:
+        log.warning("Failed to remove the docker volume, it doesn't exist")
+    except (RequestException, DockerException) as e:
+        log.exception("Failed to remove the docker volume")
+    else:
+        log.info("Docker volume removed")
 
 
-def _write_files(files, workdir):
-    log = logger.bind(files=utils.filter_filenames(files), workdir=workdir)
-    log.info("Writing files to the working directory")
-
+def _write_files(container, files):
+    """Write files to the working directory in the given container."""
+    docker_client = utils.get_docker_client()
+    log = logger.bind(files=utils.filter_filenames(files), container=container)
+    log.info("Writing files to the working directory in container")
+    mtime = int(time.time())
     files_written = []
-    for file in files:
-        filename = file.get('name')
-        if not filename or not isinstance(filename, str):
-            continue
-        filepath = os.path.join(workdir, filename)
-        content = file.get('content', b'')
-        with open(filepath, 'wb') as fd:
-            fd.write(content)
-        files_written.append(filename)
-
+    tarball_fileobj = io.BytesIO()
+    with tarfile.open(fileobj=tarball_fileobj, mode='w') as tarball:
+        for file in files:
+            if not file.get('name') or not isinstance(file['name'], str):
+                continue
+            content = file.get('content', b'')
+            file_info = tarfile.TarInfo(name=file['name'])
+            file_info.size = len(content)
+            file_info.mtime = mtime
+            tarball.addfile(file_info, fileobj=io.BytesIO(content))
+            files_written.append(file['name'])
+    try:
+        docker_client.put_archive(container, config.DOCKER_WORKDIR,
+                                  tarball_fileobj.getvalue())
+    except (RequestException, DockerException) as e:
+        log.exception("Failed to extract an archive of files to the working "
+                      "directory in container")
+        raise exceptions.DockerError(str(e))
     log.info("Successfully written files to the working directory",
              files_written=files_written)
 
@@ -127,10 +148,10 @@ def _inspect_container_state(container):
     docker_client = utils.get_docker_client()
     try:
         container_info = docker_client.inspect_container(container)
-    except (RequestException, DockerException):
+    except (RequestException, DockerException) as e:
         logger.exception("Failed to inspect the container",
                          container=container)
-        return -1
+        raise exceptions.DockerError(str(e))
     started_at = dateutil.parser.parse(container_info['State']['StartedAt'])
     finished_at = dateutil.parser.parse(container_info['State']['FinishedAt'])
     duration = finished_at - started_at
@@ -143,6 +164,20 @@ def _inspect_container_state(container):
     }
 
 
+def _inspect_container_node(container):
+    docker_client = utils.get_docker_client()
+    try:
+        container_info = docker_client.inspect_container(container)
+    except (RequestException, DockerException) as e:
+        logger.exception("Failed to inspect the container",
+                         container=container)
+        raise exceptions.DockerError(str(e))
+    if 'Node' not in container_info:
+        # Remote Docker side is not a Docker Swarm cluster
+        return None
+    return container_info['Node']['Name']
+
+
 def _create_ulimits(limits):
     ulimits = []
     if limits['cputime']:
@@ -151,64 +186,61 @@ def _create_ulimits(limits):
     return ulimits or None
 
 
-def _start_container(container, retries=1):
-    """Start a container and handle a known race condition with udev.
-
-    Retry to start a container if races with devicemapper driver and
-    udev occur: https://github.com/docker/docker/issues/4036
-
-    """
-    docker_client = utils.get_docker_client()
-    while retries:
-        retries -= 1
-        try:
-            return docker_client.start(container)
-        except RequestException as e:
-            if "devicemapper" in str(e) and retries:
-                logger.info("Failed to start the container because of the race"
-                            " with udev, retrying...",
-                            container=container, retries=retries)
-            else:
-                raise
-
-
-def _start_sandbox(image, command, limits, workdir=None, user=None,
-                   network_disabled=True):
+def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
+                   read_only=False, network_disabled=True):
     # TODO: clean up a sandbox in case of errors (fallback/periodic task)
     sandbox_id = str(uuid.uuid4())
-    name = 'sandbox-' + sandbox_id
+    name = 'epicbox-' + sandbox_id
     mem_limit = str(limits['memory']) + 'm'
 
     binds = {
-        workdir: {
-            'bind': '/sandbox',
+        workdir.volume: {
+            'bind': config.DOCKER_WORKDIR,
             'ro': False,
         }
     } if workdir else None
     ulimits = _create_ulimits(limits)
-    host_config = create_host_config(binds=binds, mem_limit=mem_limit,
-                                     ulimits=ulimits)
-
+    docker_client = utils.get_docker_client()
+    host_config = docker_client.create_host_config(binds=binds,
+                                                   read_only=read_only,
+                                                   mem_limit=mem_limit,
+                                                   memswap_limit=mem_limit,
+                                                   ulimits=ulimits)
+    environment = None
+    if workdir and workdir.node:
+        # Add constraint to run a container on the Swarm node that
+        # ran the first container with this working directory.
+        environment = ['constraint:node==' + workdir.node]
     log = logger.bind(sandbox_id=sandbox_id)
     log.info("Starting new sandbox", name=name, image=image, command=command,
              limits=limits, workdir=workdir, user=user,
-             network_disabled=network_disabled)
-    docker_client = utils.get_docker_client()
+             read_only=read_only, network_disabled=network_disabled)
     try:
         c = docker_client.create_container(image,
                                            command=command,
                                            user=user,
+                                           environment=environment,
                                            network_disabled=network_disabled,
                                            name=name,
-                                           working_dir='/sandbox',
+                                           working_dir=config.DOCKER_WORKDIR,
                                            host_config=host_config)
     except (RequestException, DockerException) as e:
         log.exception("Failed to create a sandbox container")
         raise exceptions.DockerError(str(e))
     log = log.bind(container=c)
     log.info("Sandbox container created")
+    if workdir and not workdir.node:
+        node_name = _inspect_container_node(c)
+        if node_name:
+            # Assign a Swarm node name to the working directory to run
+            # subsequent containers on this same node.
+            workdir.node = node_name
+            log.info("Assigned Swarm node to the working directory",
+                     workdir=workdir)
+    if files:
+        _write_files(c, files)
     try:
-        _start_container(c, retries=10)
+        docker_client.start(c)
     except (RequestException, DockerException) as e:
         log.exception("Failed to start the sandbox container")
         raise exceptions.DockerError(str(e))

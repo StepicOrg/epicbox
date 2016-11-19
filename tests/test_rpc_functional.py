@@ -23,7 +23,7 @@ def test_run_raise_exception(rpcepicbox):
         rpcepicbox.run('unknown', 'true')
 
 
-def test_run_upload_files(skip_if_remote_docker, profile, rpcepicbox):
+def test_run_upload_files(profile, rpcepicbox):
     files = [
         {'name': 'main.py', 'content': b'print(open("file.txt").read())'},
         {'name': 'file.txt', 'content': b'Data in file.txt'},
