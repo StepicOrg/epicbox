@@ -204,6 +204,7 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
     host_config = docker_client.create_host_config(binds=binds,
                                                    read_only=read_only,
                                                    mem_limit=mem_limit,
+                                                   memswap_limit=mem_limit,
                                                    ulimits=ulimits)
     environment = None
     if workdir and workdir.node:
