@@ -46,10 +46,11 @@ def configure(profiles=None, docker_url=None, base_workdir=None):
 
     IS_CONFIGURED = True
     if isinstance(profiles, dict):
-        PROFILES = {name: Profile(name, **profile_kwargs)
-                    for name, profile_kwargs in profiles.items()}
+        profiles_map = {name: Profile(name, **profile_kwargs)
+                        for name, profile_kwargs in profiles.items()}
     else:
-        PROFILES = {profile.name: profile for profile in profiles or []}
+        profiles_map = {profile.name: profile for profile in profiles or []}
+    PROFILES.update(profiles_map)
     DOCKER_URL = docker_url
     if base_workdir is not None:
         BASE_WORKDIR = base_workdir
