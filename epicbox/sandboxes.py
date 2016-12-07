@@ -130,13 +130,9 @@ def _write_files(container, files):
 
 
 def _get_container_output(container):
-    docker_client = utils.get_docker_client()
     try:
-        # TODO: handle very long output, currently it blocks the process
-        stdout = docker_client.logs(
-            container, stdout=True, stderr=False, stream=False)
-        stderr = docker_client.logs(
-            container, stdout=False, stderr=True, stream=False)
+        stdout = utils.docker_logs(container, stdout=True, stderr=False)
+        stderr = utils.docker_logs(container, stdout=False, stderr=True)
     except (RequestException, DockerException):
         logger.exception("Failed to get stdout/stderr of the container",
                          container=container)
