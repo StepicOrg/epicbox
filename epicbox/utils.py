@@ -1,6 +1,9 @@
 import signal
+import struct
 
 import docker
+
+from docker import constants as docker_consts
 
 from . import config
 
@@ -20,6 +23,35 @@ def get_swarm_nodes(client):
     if not system_status:
         return []
     return list(map(lambda node: node[0].strip(), system_status[4::9]))
+
+
+def demultiplex_docker_buffer(response):
+    """An improved version of _multiplexed_buffer_helper from docker-py."""
+    buf = response.content
+    buf_length = len(buf)
+    chunks = []
+    walker = 0
+    while True:
+        if buf_length - walker < 8:
+            break
+        header = buf[walker:walker + docker_consts.STREAM_HEADER_SIZE_BYTES]
+        _, length = struct.unpack_from('>BxxxL', header)
+        start = walker + docker_consts.STREAM_HEADER_SIZE_BYTES
+        end = start + length
+        walker = end
+        chunks.append(buf[start:end])
+    return b''.join(chunks)
+
+
+def docker_logs(container, stdout=False, stderr=False):
+    docker_client = get_docker_client()
+    params = {
+        'stdout': stdout and 1 or 0,
+        'stderr': stderr and 1 or 0,
+    }
+    url = docker_client._url("/containers/{0}/logs", container['Id'])
+    res = docker_client._get(url, params=params, stream=False)
+    return demultiplex_docker_buffer(res)
 
 
 def filter_filenames(files):
