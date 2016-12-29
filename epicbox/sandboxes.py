@@ -12,6 +12,8 @@ from functools import partial
 from docker.errors import DockerException, NotFound
 from docker.utils import Ulimit
 from requests.exceptions import ReadTimeout, RequestException
+from requests.packages.urllib3.exceptions import \
+    MaxRetryError, ReadTimeoutError
 
 from . import config, exceptions, utils
 
@@ -243,18 +245,26 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
     log.info("Sandbox started")
 
     log.info("Waiting until the sandbox container exits")
+    docker_wait_client = utils.get_docker_client(read_retries_disabled=True)
     timeout = False
     exit_code = None
     try:
-        exit_code = docker_client.wait(c, timeout=limits['realtime'])
+        exit_code = docker_wait_client.wait(c, timeout=limits['realtime'])
         log.info("Sandbox container exited", exit_code=exit_code)
     except ReadTimeout:
-        log.info("Sandbox realtime limit exceeded",
-                 realtime=limits['realtime'])
         timeout = True
     except (RequestException, DockerException) as e:
-        log.exception("Sandbox runtime error")
-        raise exceptions.DockerError(str(e))
+        if isinstance(e, RequestException):
+            wrapped_exc = e.args[0]
+            if (isinstance(wrapped_exc, MaxRetryError) and
+                    isinstance(wrapped_exc.reason, ReadTimeoutError)):
+                timeout = True
+        if not timeout:
+            log.exception("Sandbox runtime error")
+            raise exceptions.DockerError(str(e))
+    if timeout:
+        log.info("Sandbox realtime limit exceeded",
+                 realtime=limits['realtime'])
 
     result = {
         'exit_code': exit_code,

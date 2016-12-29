@@ -4,12 +4,35 @@ import struct
 import docker
 
 from docker import constants as docker_consts
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 from . import config
 
 
-def get_docker_client(base_url=None):
-    return docker.Client(base_url=base_url or config.DOCKER_URL)
+_DOCKER_CLIENTS = {
+    'default': None,
+    'read_retries_disabled': None,
+}
+
+
+def get_docker_client(base_url=None, read_retries_disabled=False):
+    client_name = ('read_retries_disabled' if read_retries_disabled
+                   else 'default')
+    if not _DOCKER_CLIENTS[client_name]:
+        client = docker.Client(base_url=base_url or config.DOCKER_URL,
+                               timeout=config.DOCKER_TIMEOUT)
+        retries = Retry(total=config.DOCKER_MAX_RETRIES,
+                        connect=0,
+                        read=0 if read_retries_disabled else None,
+                        method_whitelist=False,
+                        status_forcelist=[404, 500],
+                        backoff_factor=0.2,
+                        raise_on_status=False)
+        http_adapter = HTTPAdapter(max_retries=retries)
+        client.mount('http://', http_adapter)
+        _DOCKER_CLIENTS[client_name] = client
+    return _DOCKER_CLIENTS[client_name]
 
 
 def is_docker_swarm(client):

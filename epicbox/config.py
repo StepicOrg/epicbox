@@ -10,6 +10,8 @@ __all__ = ['Profile', 'configure']
 IS_CONFIGURED = False
 PROFILES = {}
 DOCKER_URL = None
+DOCKER_TIMEOUT = 30
+DOCKER_MAX_RETRIES = 5
 DOCKER_WORKDIR = '/sandbox'
 BASE_WORKDIR = None
 
