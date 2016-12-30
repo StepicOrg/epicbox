@@ -9,7 +9,7 @@ import structlog
 from contextlib import contextmanager
 from functools import partial
 
-from docker.errors import DockerException, NotFound
+from docker.errors import APIError, DockerException, NotFound
 from docker.utils import Ulimit
 from requests.exceptions import ReadTimeout, RequestException
 from requests.packages.urllib3.exceptions import \
@@ -104,7 +104,9 @@ def working_directory():
 
 def _write_files(container, files):
     """Write files to the working directory in the given container."""
-    docker_client = utils.get_docker_client()
+    # Retry on 'No such container' since it may happen when the function
+    # is called immediately after the container was created
+    docker_client = utils.get_docker_client(retry_status_forcelist=(404,))
     log = logger.bind(files=utils.filter_filenames(files), container=container)
     log.info("Writing files to the working directory in container")
     mtime = int(time.time())
@@ -223,8 +225,23 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
                                            working_dir=config.DOCKER_WORKDIR,
                                            host_config=host_config)
     except (RequestException, DockerException) as e:
-        log.exception("Failed to create a sandbox container")
-        raise exceptions.DockerError(str(e))
+        c = None
+        if "Container created" in str(e):
+            # Workaround for Docker Swarm bug:
+            # https://github.com/docker/swarm/pull/2190.
+            # API can raise an exception: 500 Server Error: Internal Server
+            # Error Container created but refresh didn't report it back.
+            # We can skip the exception and use the created container.
+            log.warning("Docker Swarm error caught while creating a container",
+                        exc=e)
+            c = name
+        elif isinstance(e, APIError) and e.response.status_code == 409:
+            log.info("The container with the given name is already created",
+                     name=name)
+            c = name
+        if not c:
+            log.exception("Failed to create a sandbox container")
+            raise exceptions.DockerError(str(e))
     log = log.bind(container=c)
     log.info("Sandbox container created")
     if workdir and not workdir.node:
@@ -245,7 +262,7 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
     log.info("Sandbox started")
 
     log.info("Waiting until the sandbox container exits")
-    docker_wait_client = utils.get_docker_client(read_retries_disabled=True)
+    docker_wait_client = utils.get_docker_client(retry_read=0)
     timeout = False
     exit_code = None
     try:
