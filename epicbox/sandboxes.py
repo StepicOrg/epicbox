@@ -105,8 +105,9 @@ def working_directory():
 def _write_files(container, files):
     """Write files to the working directory in the given container."""
     # Retry on 'No such container' since it may happen when the function
-    # is called immediately after the container was created
-    docker_client = utils.get_docker_client(retry_status_forcelist=(404,))
+    # is called immediately after the container is created.
+    # Retry on 500 Server Error when untar cannot allocate memory.
+    docker_client = utils.get_docker_client(retry_status_forcelist=(404, 500))
     log = logger.bind(files=utils.filter_filenames(files), container=container)
     log.info("Writing files to the working directory in container")
     mtime = int(time.time())
@@ -165,7 +166,9 @@ def _inspect_container_state(container):
 
 
 def _inspect_container_node(container):
-    docker_client = utils.get_docker_client()
+    # 404 No such container may be returned when TimeoutError occurs
+    # on container creation.
+    docker_client = utils.get_docker_client(retry_status_forcelist=(404,))
     try:
         container_info = docker_client.inspect_container(container)
     except (RequestException, DockerException) as e:
@@ -254,8 +257,12 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
                      workdir=workdir)
     if files:
         _write_files(c, files)
+    # Retry on 'No such container' since it may happen when the start
+    # is called immediately after the container is created.
+    docker_start_client = utils.get_docker_client(
+        retry_status_forcelist=(404,))
     try:
-        docker_client.start(c)
+        docker_start_client.start(c)
     except (RequestException, DockerException) as e:
         log.exception("Failed to start the sandbox container")
         raise exceptions.DockerError(str(e))
