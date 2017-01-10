@@ -13,7 +13,7 @@ from . import config
 _DOCKER_CLIENTS = {}
 
 
-def get_docker_client(base_url=None, retry_read=None,
+def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
                       retry_status_forcelist=None):
     client_key = (retry_read, retry_status_forcelist)
     if client_key not in _DOCKER_CLIENTS:
@@ -24,7 +24,7 @@ def get_docker_client(base_url=None, retry_read=None,
                         read=retry_read,
                         method_whitelist=False,
                         status_forcelist=retry_status_forcelist,
-                        backoff_factor=0.2,
+                        backoff_factor=config.DOCKER_BACKOFF_FACTOR,
                         raise_on_status=False)
         http_adapter = HTTPAdapter(max_retries=retries)
         client.mount('http://', http_adapter)
@@ -65,11 +65,13 @@ def demultiplex_docker_buffer(response):
 
 def docker_logs(container, stdout=False, stderr=False):
     docker_client = get_docker_client()
+    if isinstance(container, dict):
+        container = container.get('Id')
     params = {
         'stdout': stdout and 1 or 0,
         'stderr': stderr and 1 or 0,
     }
-    url = docker_client._url("/containers/{0}/logs", container['Id'])
+    url = docker_client._url("/containers/{0}/logs", container)
     res = docker_client._get(url, params=params, stream=False)
     return demultiplex_docker_buffer(res)
 
