@@ -23,7 +23,7 @@ def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
                         connect=0,
                         read=retry_read,
                         method_whitelist=False,
-                        status_forcelist=retry_status_forcelist,
+                        status_forcelist=(500,),
                         backoff_factor=config.DOCKER_BACKOFF_FACTOR,
                         raise_on_status=False)
         http_adapter = HTTPAdapter(max_retries=retries)

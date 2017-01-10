@@ -156,9 +156,10 @@ def test_run_reuse_workdir(profile, docker_client):
 
 
 def test_start_sandbox_apierror_no_such_image():
+    limits = {'cputime': 1, 'realtime': 5, 'memory': 64}
+
     with pytest.raises(DockerError) as excinfo:
-        _start_sandbox('unknown_image', 'true', {'cputime': 1, 'memory': 64},
-                       '/tmp')
+        _start_sandbox('unknown_image', 'true', limits)
 
     error = str(excinfo.value)
     # Error message depends on whether Docker Swarm is used

@@ -168,7 +168,7 @@ def _inspect_container_state(container):
 def _inspect_container_node(container):
     # 404 No such container may be returned when TimeoutError occurs
     # on container creation.
-    docker_client = utils.get_docker_client(retry_status_forcelist=(404,))
+    docker_client = utils.get_docker_client(retry_status_forcelist=(404, 500))
     try:
         container_info = docker_client.inspect_container(container)
     except (RequestException, DockerException) as e:
@@ -228,21 +228,11 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
                                            working_dir=config.DOCKER_WORKDIR,
                                            host_config=host_config)
     except (RequestException, DockerException) as e:
-        c = None
-        if "Container created" in str(e):
-            # Workaround for Docker Swarm bug:
-            # https://github.com/docker/swarm/pull/2190.
-            # API can raise an exception: 500 Server Error: Internal Server
-            # Error Container created but refresh didn't report it back.
-            # We can skip the exception and use the created container.
-            log.warning("Docker Swarm error caught while creating a container",
-                        exc=e)
-            c = name
-        elif isinstance(e, APIError) and e.response.status_code == 409:
+        if isinstance(e, APIError) and e.response.status_code == 409:
             log.info("The container with the given name is already created",
                      name=name)
             c = name
-        if not c:
+        else:
             log.exception("Failed to create a sandbox container")
             raise exceptions.DockerError(str(e))
     log = log.bind(container=c)
@@ -260,7 +250,7 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
     # Retry on 'No such container' since it may happen when the start
     # is called immediately after the container is created.
     docker_start_client = utils.get_docker_client(
-        retry_status_forcelist=(404,))
+        retry_status_forcelist=(404, 500))
     try:
         docker_start_client.start(c)
     except (RequestException, DockerException) as e:
