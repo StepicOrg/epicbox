@@ -14,7 +14,7 @@ _DOCKER_CLIENTS = {}
 
 
 def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
-                      retry_status_forcelist=None):
+                      retry_status_forcelist=(500,)):
     client_key = (retry_read, retry_status_forcelist)
     if client_key not in _DOCKER_CLIENTS:
         client = docker.Client(base_url=base_url or config.DOCKER_URL,
@@ -23,7 +23,7 @@ def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
                         connect=0,
                         read=retry_read,
                         method_whitelist=False,
-                        status_forcelist=(500,),
+                        status_forcelist=retry_status_forcelist,
                         backoff_factor=config.DOCKER_BACKOFF_FACTOR,
                         raise_on_status=False)
         http_adapter = HTTPAdapter(max_retries=retries)
