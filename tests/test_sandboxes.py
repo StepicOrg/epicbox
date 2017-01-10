@@ -107,7 +107,8 @@ def test_run_network_disabled(profile):
 def test_run_network_enabled(profile):
     profile.network_disabled = False
 
-    result = run(profile.name, 'curl -I https://google.com')
+    result = run(profile.name, 'curl -I https://google.com',
+                 limits={'realtime': 15})
 
     assert result['exit_code'] == 0
     assert b'302 Found' in result['stdout']
