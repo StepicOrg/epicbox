@@ -15,7 +15,6 @@ DOCKER_MAX_RETRIES = 8
 DOCKER_MAX_READ_RETRIES = 5
 DOCKER_BACKOFF_FACTOR = 0.2
 DOCKER_WORKDIR = '/sandbox'
-BASE_WORKDIR = None
 
 DEFAULT_LIMITS = {
     # CPU time in seconds, None for unlimited
@@ -46,7 +45,7 @@ class Profile(object):
 
 
 def configure(profiles=None, docker_url=None, base_workdir=None):
-    global IS_CONFIGURED, PROFILES, DOCKER_URL, BASE_WORKDIR
+    global IS_CONFIGURED, PROFILES, DOCKER_URL
 
     IS_CONFIGURED = True
     if isinstance(profiles, dict):
@@ -56,10 +55,6 @@ def configure(profiles=None, docker_url=None, base_workdir=None):
         profiles_map = {profile.name: profile for profile in profiles or []}
     PROFILES.update(profiles_map)
     DOCKER_URL = docker_url
-    if base_workdir is not None:
-        BASE_WORKDIR = base_workdir
-    else:
-        BASE_WORKDIR = tempfile.gettempdir()
 
 
 if not structlog._config._CONFIG.is_configured:

@@ -20,6 +20,5 @@ PROFILES = {
     }
 }
 DOCKER_URL = None
-BASE_WORKDIR = None
 
 RPC_TRANSPORT_URL = 'rabbit://guest:guest@localhost:5672//'
