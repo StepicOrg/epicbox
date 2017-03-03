@@ -4,6 +4,7 @@ import struct
 import docker
 
 from docker import constants as docker_consts
+from docker.utils import Ulimit
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
@@ -90,6 +91,17 @@ def merge_limits_defaults(limits):
     if not is_realtime_specified:
         limits['realtime'] = limits['cputime'] * config.CPU_TO_REAL_TIME_FACTOR
     return limits
+
+
+def create_ulimits(limits):
+    ulimits = []
+    if limits['cputime']:
+        cpu = limits['cputime']
+        ulimits.append(Ulimit(name='cpu', soft=cpu, hard=cpu))
+    if 'file_size' in limits:
+        fsize = limits['file_size']
+        ulimits.append(Ulimit(name='fsize', soft=fsize, hard=fsize))
+    return ulimits or None
 
 
 def truncate_result(result):
