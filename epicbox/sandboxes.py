@@ -10,7 +10,6 @@ from contextlib import contextmanager
 from functools import partial
 
 from docker.errors import APIError, DockerException, NotFound
-from docker.utils import Ulimit
 from requests.exceptions import ReadTimeout, RequestException
 from requests.packages.urllib3.exceptions import \
     MaxRetryError, ReadTimeoutError
@@ -178,14 +177,6 @@ def _inspect_container_node(container):
     return container_info['Node']['Name']
 
 
-def _create_ulimits(limits):
-    ulimits = []
-    if limits['cputime']:
-        cpu = limits['cputime']
-        ulimits.append(Ulimit(name='cpu', soft=cpu, hard=cpu))
-    return ulimits or None
-
-
 def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
                    read_only=False, network_disabled=True):
     # TODO: clean up a sandbox in case of errors (fallback/periodic task)
@@ -199,7 +190,7 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
             'ro': False,
         }
     } if workdir else None
-    ulimits = _create_ulimits(limits)
+    ulimits = utils.create_ulimits(limits)
     docker_client = utils.get_docker_client()
     host_config = docker_client.create_host_config(binds=binds,
                                                    read_only=read_only,

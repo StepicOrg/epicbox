@@ -82,6 +82,19 @@ def test_run_memory_limit(profile):
     assert result['exit_code'] not in [None, 0]
 
 
+def test_run_file_size_limit(profile):
+    limits = {'file_size': 10}
+
+    result = run(profile.name, 'echo -n "0123456789" > file', limits=limits)
+
+    assert result['exit_code'] == 0
+
+    result = run(profile.name, 'echo -n "01234567890" > file', limits=limits)
+
+    assert result['exit_code'] == 1
+    assert b'write error: File too large' in result['stderr']
+
+
 def test_run_read_only_file_system(profile_read_only):
     result = run(profile_read_only.name, 'touch /tmp/file')
 
@@ -202,6 +215,6 @@ def test_write_files(docker_client, docker_image):
         assert stdout == (b'755\n'
                           b'file.txt\n'
                           b'main.py\n'
-                          b'file.txt contentmain.py content\n')
+                          b'file.txt contentmain.py content')
     finally:
         docker_client.remove_container(container, v=True, force=True)
