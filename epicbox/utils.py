@@ -20,8 +20,8 @@ def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
     if client_key not in _DOCKER_CLIENTS:
         client = docker.Client(base_url=base_url or config.DOCKER_URL,
                                timeout=config.DOCKER_TIMEOUT)
-        retries = Retry(total=config.DOCKER_MAX_RETRIES,
-                        connect=0,
+        retries = Retry(total=config.DOCKER_MAX_TOTAL_RETRIES,
+                        connect=config.DOCKER_MAX_CONNECT_RETRIES,
                         read=retry_read,
                         method_whitelist=False,
                         status_forcelist=retry_status_forcelist,
