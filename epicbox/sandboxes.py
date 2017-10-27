@@ -35,19 +35,15 @@ def run(profile_name, command=None, files=None, stdin=None, limits=None,
     command = command or profile.command or 'true'
     if stdin:
         if not isinstance(stdin, (bytes, str)):
-            raise TypeError("stdin should be 'bytes' or 'str'")
-        stdin_content = stdin if isinstance(stdin, bytes) else stdin.encode()
-        stdin_filename = '_sandbox_stdin'
-        files = files or []
-        files.append({'name': stdin_filename, 'content': stdin_content})
-        # TODO: write to stdin using attach API
-        command = '< {0} {1}'.format(stdin_filename, command)
+            raise TypeError("'stdin' must be bytes or str")
+        if isinstance(stdin, str):
+            stdin = stdin.encode()
     command_list = ['/bin/sh', '-c', command]
     limits = utils.merge_limits_defaults(limits)
 
     start_sandbox = partial(
         _start_sandbox, profile.docker_image, command_list, limits,
-        files=files, workdir=workdir, user=profile.user,
+        files=files, stdin=stdin, workdir=workdir, user=profile.user,
         read_only=profile.read_only, network_disabled=profile.network_disabled)
     if files and not workdir:
         with working_directory() as workdir:
@@ -59,7 +55,6 @@ class _WorkingDirectory(object):
     """Represent a Docker volume used as a working directory.
 
     Not intended to be instantiated by yourself.
-
     """
 
     def __init__(self, volume, node=None):
@@ -166,8 +161,9 @@ def _inspect_container_node(container):
     return container_info['Node']['Name']
 
 
-def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
-                   read_only=False, network_disabled=True):
+def _start_sandbox(image, command, limits, files=None, stdin=None,
+                   workdir=None, user=None, read_only=False,
+                   network_disabled=True):
     # TODO: clean up a sandbox in case of errors (fallback/periodic task)
     sandbox_id = str(uuid.uuid4())
     name = 'epicbox-' + sandbox_id
@@ -235,7 +231,7 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
         'oom_killed': False,
     }
     try:
-        stdout, stderr = utils.docker_communicate(c,
+        stdout, stderr = utils.docker_communicate(c, stdin=stdin,
                                                   timeout=limits['realtime'])
     except TimeoutError:
         log.info("Sandbox realtime limit exceeded",
