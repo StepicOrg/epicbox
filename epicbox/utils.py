@@ -172,6 +172,8 @@ def docker_communicate(container, stdin=None, start_container=True,
 
     :raise TimeoutError: If the container does not terminate after `timeout`
                          seconds. The container is not killed automatically.
+    :raise RequestException, DockerException, OSError: If an error occurred
+        with the underlying docker system.
     """
     # Retry on 'No such container' since it may happen when the attach/start
     # is called immediately after the container is created.
@@ -218,6 +220,7 @@ def docker_communicate(container, stdin=None, start_container=True,
             # Save CPU time
             time.sleep(0.05)
     else:
+        sock.close()
         raise TimeoutError("Container doesn't terminate after timeout seconds")
 
     return demultiplex_docker_stream(stream_data)
