@@ -27,8 +27,7 @@ def test_docker_logs(docker_client, docker_image):
         docker_client.remove_container(container, v=True, force=True)
 
 
-def test_docker_communicate_empty_input_empty_output(test_utils,
-                                                     docker_client):
+def test_docker_communicate_empty_input_empty_output(test_utils):
     container = test_utils.create_test_container(command='true')
 
     stdout, stderr = docker_communicate(container)
@@ -37,7 +36,7 @@ def test_docker_communicate_empty_input_empty_output(test_utils,
     assert stderr == b''
 
 
-def test_docker_communicate_only_output(test_utils, docker_client):
+def test_docker_communicate_only_output(test_utils):
     container = test_utils.create_test_container(command='echo 42')
 
     stdout, stderr = docker_communicate(container)
@@ -46,7 +45,7 @@ def test_docker_communicate_only_output(test_utils, docker_client):
     assert stderr == b''
 
 
-def test_docker_communicate_split_output_streams(test_utils, docker_client):
+def test_docker_communicate_split_output_streams(test_utils):
     container = test_utils.create_test_container(
         command='/bin/sh -c "cat && echo error >&2"')
 
@@ -56,7 +55,9 @@ def test_docker_communicate_split_output_streams(test_utils, docker_client):
     assert stderr == b'error\n'
 
 
-def test_docker_communicate_copy_input_to_output(test_utils, docker_client):
+# TODO: exit code != 0
+
+def test_docker_communicate_copy_input_to_output(test_utils):
     stdin_options = [
         b'\n\n\r\n',
         b'Hello!',
@@ -70,6 +71,15 @@ def test_docker_communicate_copy_input_to_output(test_utils, docker_client):
 
         assert stdout == stdin
         assert stderr == b''
+
+
+def test_docker_communicate_failed_command(test_utils):
+    container = test_utils.create_test_container(command='sleep')
+
+    stdout, stderr = docker_communicate(container)
+
+    assert stdout == b''
+    assert b'missing operand' in stderr
 
 
 def test_docker_communicate_timeout_reached(test_utils, docker_client):
