@@ -31,8 +31,6 @@ def test_docker_communicate_split_output_streams(test_utils):
     assert stderr == b'error\n'
 
 
-# TODO: exit code != 0
-
 def test_docker_communicate_copy_input_to_output(test_utils):
     stdin_options = [
         b'\n\n\r\n',
