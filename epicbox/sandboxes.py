@@ -181,7 +181,8 @@ def _start_sandbox(image, command, limits, files=None, stdin=None,
                                                    read_only=read_only,
                                                    mem_limit=mem_limit,
                                                    memswap_limit=mem_limit,
-                                                   ulimits=ulimits)
+                                                   ulimits=ulimits,
+                                                   log_config={'type': 'none'})
     environment = None
     if workdir and workdir.node:
         # Add constraint to run a container on the Swarm node that
