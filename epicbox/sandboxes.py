@@ -2,20 +2,15 @@ import io
 import tarfile
 import time
 import uuid
-
-import dateutil.parser
-import structlog
-
 from contextlib import contextmanager
 from functools import partial
 
+import dateutil.parser
+import structlog
 from docker.errors import APIError, DockerException, NotFound
-from requests.exceptions import ReadTimeout, RequestException
-from requests.packages.urllib3.exceptions import \
-    MaxRetryError, ReadTimeoutError
+from requests.exceptions import RequestException
 
 from . import config, exceptions, utils
-
 
 __all__ = ['run', 'working_directory']
 
@@ -66,6 +61,7 @@ class _WorkingDirectory(object):
     Not intended to be instantiated by yourself.
 
     """
+
     def __init__(self, volume, node=None):
         self.volume = volume
         self.node = node
@@ -133,17 +129,6 @@ def _write_files(container, files):
              files_written=files_written)
 
 
-def _get_container_output(container):
-    try:
-        stdout = utils.docker_logs(container, stdout=True, stderr=False)
-        stderr = utils.docker_logs(container, stdout=False, stderr=True)
-    except (RequestException, DockerException):
-        logger.exception("Failed to get stdout/stderr of the container",
-                         container=container)
-        return b'', b''
-    return stdout, stderr
-
-
 def _inspect_container_state(container):
     docker_client = utils.get_docker_client()
     try:
@@ -159,6 +144,7 @@ def _inspect_container_state(container):
     if duration_seconds < 0:
         duration_seconds = -1
     return {
+        'exit_code': container_info['State']['ExitCode'],
         'duration': duration_seconds,
         'oom_killed': container_info['State'].get('OOMKilled', False),
     }
@@ -213,6 +199,7 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
         c = docker_client.create_container(image,
                                            command=command,
                                            user=user,
+                                           stdin_open=True,
                                            environment=environment,
                                            network_disabled=network_disabled,
                                            name=name,
@@ -238,52 +225,30 @@ def _start_sandbox(image, command, limits, files=None, workdir=None, user=None,
                      workdir=workdir)
     if files:
         _write_files(c, files)
-    # Retry on 'No such container' since it may happen when the start
-    # is called immediately after the container is created.
-    docker_start_client = utils.get_docker_client(
-        retry_status_forcelist=(404, 500))
-    try:
-        docker_start_client.start(c)
-    except (RequestException, DockerException) as e:
-        log.exception("Failed to start the sandbox container")
-        raise exceptions.DockerError(str(e))
-    log.info("Sandbox started")
-
-    log.info("Waiting until the sandbox container exits")
-    docker_wait_client = utils.get_docker_client(retry_read=0)
-    timeout = False
-    exit_code = None
-    try:
-        exit_code = docker_wait_client.wait(c, timeout=limits['realtime'])
-        log.info("Sandbox container exited", exit_code=exit_code)
-    except ReadTimeout:
-        timeout = True
-    except (RequestException, DockerException) as e:
-        if isinstance(e, RequestException):
-            wrapped_exc = e.args[0]
-            if (isinstance(wrapped_exc, MaxRetryError) and
-                    isinstance(wrapped_exc.reason, ReadTimeoutError)):
-                timeout = True
-        if not timeout:
-            log.exception("Sandbox runtime error")
-            raise exceptions.DockerError(str(e))
-    if timeout:
-        log.info("Sandbox realtime limit exceeded",
-                 realtime=limits['realtime'])
 
     result = {
-        'exit_code': exit_code,
+        'exit_code': None,
         'stdout': b'',
         'stderr': b'',
         'duration': None,
-        'timeout': timeout,
+        'timeout': False,
         'oom_killed': False,
     }
-    if exit_code is not None:
-        result['stdout'], result['stderr'] = _get_container_output(c)
+    try:
+        stdout, stderr = utils.docker_communicate(c,
+                                                  timeout=limits['realtime'])
+    except TimeoutError:
+        log.info("Sandbox realtime limit exceeded",
+                 realtime=limits['realtime'])
+        result['timeout'] = True
+    except (RequestException, DockerException, OSError) as e:
+        log.exception("Sandbox runtime error")
+        raise exceptions.DockerError(str(e))
+    else:
+        log.info("Sandbox container exited")
         state = _inspect_container_state(c)
-        result.update(state)
-        if (utils.is_killed_by_sigkill_or_sigxcpu(exit_code) and
+        result.update(stdout=stdout, stderr=stderr, **state)
+        if (utils.is_killed_by_sigkill_or_sigxcpu(state['exit_code']) and
                 not state['oom_killed']):
             # SIGKILL/SIGXCPU is sent but not by out of memory killer
             result['timeout'] = True

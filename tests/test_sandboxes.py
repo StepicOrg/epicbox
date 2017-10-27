@@ -1,15 +1,14 @@
 import time
 import uuid
+from unittest.mock import ANY
 
 import docker.errors
 import pytest
 
-from unittest.mock import ANY
-
 from epicbox import config, utils
 from epicbox.exceptions import DockerError
-from epicbox.sandboxes import run, working_directory, \
-                              _start_sandbox, _write_files
+from epicbox.sandboxes import (run, working_directory,
+                               _start_sandbox, _write_files)
 
 
 def test_run_python(profile):
@@ -69,6 +68,7 @@ def test_run_cpu_timeout(profile):
 
     assert result['timeout'] is True
     assert result['exit_code'] is not None
+    assert b'Killed' in result['stderr']
     realtime_duration = time.time() - start_time
     assert realtime_duration < 10
 

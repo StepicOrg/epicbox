@@ -55,24 +55,6 @@ def get_swarm_nodes(client):
     return list(map(lambda node: node[0].strip(), system_status[4::9]))
 
 
-def demultiplex_docker_buffer(response):
-    """An improved version of _multiplexed_buffer_helper from docker-py."""
-    buf = response.content
-    buf_length = len(buf)
-    chunks = []
-    walker = 0
-    while True:
-        if buf_length - walker < 8:
-            break
-        header = buf[walker:walker + docker_consts.STREAM_HEADER_SIZE_BYTES]
-        _, length = struct.unpack_from('>BxxxL', header)
-        start = walker + docker_consts.STREAM_HEADER_SIZE_BYTES
-        end = start + length
-        walker = end
-        chunks.append(buf[start:end])
-    return b''.join(chunks)
-
-
 def demultiplex_docker_stream(data):
     """
     Demultiplex the raw docker stream into separate stdout and stderr streams.
@@ -108,19 +90,6 @@ def demultiplex_docker_stream(data):
         elif stream_type == 2:
             stderr_chunks.append(data[start:end])
     return b''.join(stdout_chunks), b''.join(stderr_chunks)
-
-
-def docker_logs(container, stdout=False, stderr=False):
-    docker_client = get_docker_client()
-    if isinstance(container, dict):
-        container = container.get('Id')
-    params = {
-        'stdout': stdout and 1 or 0,
-        'stderr': stderr and 1 or 0,
-    }
-    url = docker_client._url("/containers/{0}/logs", container)
-    res = docker_client._get(url, params=params, stream=False)
-    return demultiplex_docker_buffer(res)
 
 
 def _socket_read(sock, n=4096):
