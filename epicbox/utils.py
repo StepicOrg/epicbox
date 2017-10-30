@@ -101,7 +101,6 @@ def _socket_read(sock, n=4096):
     try:
         data = os.read(sock.fileno(), n)
     except EnvironmentError as e:
-        print("## exc:", e)
         if e.errno in ERRNO_RECOVERABLE:
             return b''
         raise e
