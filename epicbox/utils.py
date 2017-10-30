@@ -126,8 +126,7 @@ def docker_communicate(container, stdin=None, start_container=True,
                        timeout=None):
     """
     Interact with the container: Start it if required. Send data to stdin.
-    Read data from stdout and stderr, until end-of-file is reached. Wait for
-    the container to terminate.
+    Read data from stdout and stderr, until end-of-file is reached.
 
     :param container: A container to interact with.
     :param bytes stdin: The data to be sent to the standard input of the

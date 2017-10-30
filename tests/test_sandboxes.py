@@ -140,6 +140,11 @@ def test_run_upload_files(profile):
 
 
 def test_run_read_stdin(profile):
+    result = run(profile.name, 'cat', stdin=b'')
+
+    assert result['exit_code'] == 0
+    assert result['stdout'] == b''
+
     result = run(profile.name, 'cat', stdin=b'binary data\n')
 
     assert result['exit_code'] == 0

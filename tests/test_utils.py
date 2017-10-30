@@ -12,6 +12,16 @@ def test_docker_communicate_empty_input_empty_output(test_utils):
     assert stderr == b''
 
 
+def test_docker_communicate_empty_input_closed_stdin(test_utils):
+    container = test_utils.create_test_container(command='cat',
+                                                 stdin_open=False)
+
+    stdout, stderr = docker_communicate(container)
+
+    assert stdout == b''
+    assert stderr == b''
+
+
 def test_docker_communicate_only_output(test_utils):
     container = test_utils.create_test_container(command='echo 42')
 

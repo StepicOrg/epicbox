@@ -73,7 +73,7 @@ def test_utils(docker_client, docker_image):
     class TestUtils(object):
         def create_test_container(self, **kwargs):
             kwargs.update(name='epicbox-test-' + str(uuid.uuid4()),
-                          stdin_open=True)
+                          stdin_open=kwargs.get('stdin_open', True))
             return docker_client.create_container(docker_image, **kwargs)
 
     return TestUtils()
