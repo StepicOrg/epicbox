@@ -156,7 +156,7 @@ def docker_communicate(container, stdin=None, start_container=True,
         'logs': 0,
     }
     sock = docker_client.attach_socket(container, params=params)
-    os.set_blocking(sock.fileno(), False)  # Make socket non-blocking
+    sock._sock.setblocking(False)  # Make socket non-blocking
     log.info("Attached to the container", params=params, fd=sock.fileno(),
              timeout=timeout)
     if start_container:
