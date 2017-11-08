@@ -1,8 +1,13 @@
+import errno
+import os
+import select
 import signal
+import socket
 import struct
+import time
 
 import docker
-
+import structlog
 from docker import constants as docker_consts
 from docker.utils import Ulimit
 from requests.adapters import HTTPAdapter
@@ -10,8 +15,12 @@ from requests.packages.urllib3.util.retry import Retry
 
 from . import config
 
+logger = structlog.get_logger()
 
 _DOCKER_CLIENTS = {}
+
+#: Recoverable IO/OS Errors.
+ERRNO_RECOVERABLE = (errno.EINTR, errno.EDEADLK, errno.EWOULDBLOCK)
 
 
 def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
@@ -46,35 +55,156 @@ def get_swarm_nodes(client):
     return list(map(lambda node: node[0].strip(), system_status[4::9]))
 
 
-def demultiplex_docker_buffer(response):
-    """An improved version of _multiplexed_buffer_helper from docker-py."""
-    buf = response.content
-    buf_length = len(buf)
-    chunks = []
+def demultiplex_docker_stream(data):
+    """
+    Demultiplex the raw docker stream into separate stdout and stderr streams.
+
+    Docker multiplexes streams together when there is no PTY attached, by
+    sending an 8-byte header, followed by a chunk of data.
+
+    The first 4 bytes of the header denote the stream from which the data came
+    (i.e. 0x01 = stdout, 0x02 = stderr). Only the first byte of these initial 4
+    bytes is used.
+
+    The next 4 bytes indicate the length of the following chunk of data as an
+    integer in big endian format. This much data must be consumed before the
+    next 8-byte header is read.
+
+    Docs: https://docs.docker.com/engine/api/v1.24/#attach-to-a-container
+
+    :param bytes data: A raw stream data.
+    :return: A tuple `(stdout, stderr)` of bytes objects.
+    """
+    data_length = len(data)
+    stdout_chunks = []
+    stderr_chunks = []
     walker = 0
-    while True:
-        if buf_length - walker < 8:
-            break
-        header = buf[walker:walker + docker_consts.STREAM_HEADER_SIZE_BYTES]
-        _, length = struct.unpack_from('>BxxxL', header)
+    while data_length - walker >= 8:
+        header = data[walker:walker + docker_consts.STREAM_HEADER_SIZE_BYTES]
+        stream_type, length = struct.unpack_from('>BxxxL', header)
         start = walker + docker_consts.STREAM_HEADER_SIZE_BYTES
         end = start + length
         walker = end
-        chunks.append(buf[start:end])
-    return b''.join(chunks)
+        if stream_type == 1:
+            stdout_chunks.append(data[start:end])
+        elif stream_type == 2:
+            stderr_chunks.append(data[start:end])
+    return b''.join(stdout_chunks), b''.join(stderr_chunks)
 
 
-def docker_logs(container, stdout=False, stderr=False):
-    docker_client = get_docker_client()
-    if isinstance(container, dict):
-        container = container.get('Id')
+def _socket_read(sock, n=4096):
+    """
+    Read at most `n` bytes of data from the `sock` socket.
+
+    :return: A bytes object or `None` at end of stream.
+    """
+    try:
+        data = os.read(sock.fileno(), n)
+    except EnvironmentError as e:
+        if e.errno in ERRNO_RECOVERABLE:
+            return b''
+        raise e
+    if data:
+        return data
+
+
+def _socket_write(sock, data):
+    """
+    Write as much data from the `data` buffer to the `sock` socket as possible.
+
+    :return: The number of bytes sent.
+    """
+    try:
+        return os.write(sock.fileno(), data)
+    except EnvironmentError as e:
+        if e.errno in ERRNO_RECOVERABLE:
+            return 0
+        raise e
+
+
+def docker_communicate(container, stdin=None, start_container=True,
+                       timeout=None):
+    """
+    Interact with the container: Start it if required. Send data to stdin.
+    Read data from stdout and stderr, until end-of-file is reached.
+
+    :param container: A container to interact with.
+    :param bytes stdin: The data to be sent to the standard input of the
+                        container, or `None`, if no data should be sent.
+    :param bool start_container: Whether to start the container after
+                                 attaching to it.
+    :param int timeout: Time in seconds to wait for the container to terminate.
+
+    :return: A tuple `(stdout, stderr)` of bytes objects.
+
+    :raise TimeoutError: If the container does not terminate after `timeout`
+                         seconds. The container is not killed automatically.
+    :raise RequestException, DockerException, OSError: If an error occurred
+        with the underlying docker system.
+    """
+    # Retry on 'No such container' since it may happen when the attach/start
+    # is called immediately after the container is created.
+    docker_client = get_docker_client(retry_status_forcelist=(404, 500))
+    log = logger.bind(container=container)
     params = {
-        'stdout': stdout and 1 or 0,
-        'stderr': stderr and 1 or 0,
+        # Attach to stdin only if there is something to send to it
+        'stdin': 1 if stdin else 0,
+        'stdout': 1,
+        'stderr': 1,
+        'stream': 1,
+        'logs': 0,
     }
-    url = docker_client._url("/containers/{0}/logs", container)
-    res = docker_client._get(url, params=params, stream=False)
-    return demultiplex_docker_buffer(res)
+    sock = docker_client.attach_socket(container, params=params)
+    sock._sock.setblocking(False)  # Make socket non-blocking
+    log.info("Attached to the container", params=params, fd=sock.fileno(),
+             timeout=timeout)
+    if start_container:
+        docker_client.start(container)
+        log.info("Container started")
+
+    stream_data = b''
+    start_time = time.time()
+    while timeout is None or time.time() - start_time < timeout:
+        read_ready, write_ready, _ = select.select([sock], [sock], [], 1)
+        is_io_active = False
+        if read_ready:
+            is_io_active = True
+            try:
+                data = _socket_read(sock)
+            except ConnectionResetError:
+                log.warning("Connection reset caught on reading the container "
+                            "output stream. Break communication")
+                break
+            if data is None:
+                log.debug("Container output reached EOF. Closing the socket")
+                break
+            stream_data += data
+
+        if write_ready and stdin:
+            is_io_active = True
+            try:
+                written = _socket_write(sock, stdin)
+            except BrokenPipeError:
+                # Broken pipe may happen when a container terminates quickly
+                # (e.g. OOM Killer) and docker manages to close the socket
+                # almost immediately before we're trying to write to stdin.
+                log.warning("Broken pipe caught on writing to stdin. Break "
+                            "communication")
+                break
+            stdin = stdin[written:]
+            if not stdin:
+                log.debug("All input data has been sent. Shut down the write "
+                          "half of the socket.")
+                sock._sock.shutdown(socket.SHUT_WR)
+
+        if not is_io_active:
+            # Save CPU time
+            time.sleep(0.05)
+    else:
+        sock.close()
+        raise TimeoutError("Container doesn't terminate after timeout seconds")
+    sock.close()
+    return demultiplex_docker_stream(stream_data)
 
 
 def filter_filenames(files):
