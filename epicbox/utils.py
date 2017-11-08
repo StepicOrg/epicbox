@@ -177,7 +177,13 @@ def docker_communicate(container, stdin=None, start_container=True,
             stream_data += data
         if write_ready and stdin:
             is_io_active = True
-            written = _socket_write(sock, stdin)
+            try:
+                written = _socket_write(sock, stdin)
+            except BrokenPipeError:
+                log.warning("Broken pipe caught on writing to stdin. Break "
+                            "communication")
+                sock.close()
+                break
             stdin = stdin[written:]
             if not stdin:
                 log.debug("All input data has been sent. Shut down the write "
