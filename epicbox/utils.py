@@ -169,33 +169,41 @@ def docker_communicate(container, stdin=None, start_container=True,
         is_io_active = False
         if read_ready:
             is_io_active = True
-            data = _socket_read(sock)
+            try:
+                data = _socket_read(sock)
+            except ConnectionResetError:
+                log.warning("Connection reset caught on reading the container "
+                            "output stream. Break communication")
+                break
             if data is None:
                 log.debug("Container output reached EOF. Closing the socket")
-                sock.close()
                 break
             stream_data += data
+
         if write_ready and stdin:
             is_io_active = True
             try:
                 written = _socket_write(sock, stdin)
             except BrokenPipeError:
+                # Broken pipe may happen when a container terminates quickly
+                # (e.g. OOM Killer) and docker manages to close the socket
+                # almost immediately before we're trying to write to stdin.
                 log.warning("Broken pipe caught on writing to stdin. Break "
                             "communication")
-                sock.close()
                 break
             stdin = stdin[written:]
             if not stdin:
                 log.debug("All input data has been sent. Shut down the write "
                           "half of the socket.")
                 sock._sock.shutdown(socket.SHUT_WR)
+
         if not is_io_active:
             # Save CPU time
             time.sleep(0.05)
     else:
         sock.close()
         raise TimeoutError("Container doesn't terminate after timeout seconds")
-
+    sock.close()
     return demultiplex_docker_stream(stream_data)
 
 
