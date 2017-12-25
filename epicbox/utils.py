@@ -6,14 +6,17 @@ import socket
 import struct
 import time
 
+import dateutil.parser
 import docker
 import structlog
 from docker import constants as docker_consts
+from docker.errors import DockerException
 from docker.utils import Ulimit
 from requests.adapters import HTTPAdapter
+from requests.exceptions import RequestException
 from requests.packages.urllib3.util.retry import Retry
 
-from . import config
+from . import config, exceptions
 
 logger = structlog.get_logger()
 
@@ -42,17 +45,41 @@ def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
     return _DOCKER_CLIENTS[client_key]
 
 
-def is_docker_swarm(client):
-    """Check if the client connected to a Docker Swarm cluster."""
-    docker_version = client.version()['Version']
-    return docker_version.startswith('swarm')
+def inspect_container_node(container):
+    # 404 No such container may be returned when TimeoutError occurs
+    # on container creation.
+    docker_client = get_docker_client(retry_status_forcelist=(404, 500))
+    try:
+        container_info = docker_client.inspect_container(container)
+    except (RequestException, DockerException) as e:
+        logger.exception("Failed to inspect the container",
+                         container=container)
+        raise exceptions.DockerError(str(e))
+    if 'Node' not in container_info:
+        # Remote Docker side is not a Docker Swarm cluster
+        return None
+    return container_info['Node']['Name']
 
 
-def get_swarm_nodes(client):
-    system_status = client.info()['SystemStatus']
-    if not system_status:
-        return []
-    return list(map(lambda node: node[0].strip(), system_status[4::9]))
+def inspect_container_state(container):
+    docker_client = get_docker_client()
+    try:
+        container_info = docker_client.inspect_container(container)
+    except (RequestException, DockerException) as e:
+        logger.exception("Failed to inspect the container",
+                         container=container)
+        raise exceptions.DockerError(str(e))
+    started_at = dateutil.parser.parse(container_info['State']['StartedAt'])
+    finished_at = dateutil.parser.parse(container_info['State']['FinishedAt'])
+    duration = finished_at - started_at
+    duration_seconds = duration.total_seconds()
+    if duration_seconds < 0:
+        duration_seconds = -1
+    return {
+        'exit_code': container_info['State']['ExitCode'],
+        'duration': duration_seconds,
+        'oom_killed': container_info['State'].get('OOMKilled', False),
+    }
 
 
 def demultiplex_docker_stream(data):
@@ -133,7 +160,8 @@ def docker_communicate(container, stdin=None, start_container=True,
                         container, or `None`, if no data should be sent.
     :param bool start_container: Whether to start the container after
                                  attaching to it.
-    :param int timeout: Time in seconds to wait for the container to terminate.
+    :param int timeout: Time in seconds to wait for the container to terminate,
+        or `None` to make it unlimited.
 
     :return: A tuple `(stdout, stderr)` of bytes objects.
 
@@ -147,8 +175,9 @@ def docker_communicate(container, stdin=None, start_container=True,
     docker_client = get_docker_client(retry_status_forcelist=(404, 500))
     log = logger.bind(container=container)
     params = {
-        # Attach to stdin only if there is something to send to it
-        'stdin': 1 if stdin else 0,
+        # Attach to stdin even if there is nothing to send to it to be able
+        # to properly close it (stdin of the container is always open).
+        'stdin': 1,
         'stdout': 1,
         'stderr': 1,
         'stream': 1,
@@ -158,6 +187,10 @@ def docker_communicate(container, stdin=None, start_container=True,
     sock._sock.setblocking(False)  # Make socket non-blocking
     log.info("Attached to the container", params=params, fd=sock.fileno(),
              timeout=timeout)
+    if not stdin:
+        log.debug("There is no input data. Shut down the write half "
+                  "of the socket.")
+        sock._sock.shutdown(socket.SHUT_WR)
     if start_container:
         docker_client.start(container)
         log.info("Container started")
@@ -202,7 +235,7 @@ def docker_communicate(container, stdin=None, start_container=True,
             time.sleep(0.05)
     else:
         sock.close()
-        raise TimeoutError("Container doesn't terminate after timeout seconds")
+        raise TimeoutError("Container didn't terminate after timeout seconds")
     sock.close()
     return demultiplex_docker_stream(stream_data)
 
