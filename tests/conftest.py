@@ -4,6 +4,7 @@ import pytest
 import structlog
 
 import epicbox
+from epicbox import sandboxes
 from epicbox.rpcapi import EpicBoxAPI
 from epicbox.utils import get_docker_client
 
@@ -60,7 +61,8 @@ def configure(profile, profile_read_only, docker_url, base_workdir):
 
 
 @pytest.fixture(scope='session', autouse=True)
-def cleanup_test_containers(docker_client):
+def isolate_and_cleanup_test_containers(docker_client):
+    sandboxes._SANDBOX_NAME_PREFIX = 'epicbox-test-'
     yield
     test_containers = docker_client.containers(
         filters={'name': 'epicbox-test'}, all=True)

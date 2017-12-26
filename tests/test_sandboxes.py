@@ -5,15 +5,166 @@ from unittest.mock import ANY
 import docker.errors
 import pytest
 
-from epicbox import config, utils
+from epicbox import config
 from epicbox.exceptions import DockerError
-from epicbox.sandboxes import (run, working_directory,
-                               _start_sandbox, _write_files)
+from epicbox.sandboxes import (create, destroy, run, start, working_directory,
+                               _write_files)
+from .utils import is_docker_swarm, get_swarm_nodes
+
+
+def test_create(profile, docker_client):
+    test_containers = docker_client.containers(
+        filters={'name': 'epicbox-test-'}, all=True)
+    assert test_containers == []
+
+    sandbox = create(profile.name, 'true')
+
+    container = docker_client.inspect_container(sandbox)
+    assert container['Name'].startswith('/epicbox-test-')
+    assert container['State']['Status'] == 'created'
+    assert 'true' in container['Args']
+    assert sandbox['RealtimeLimit'] == 5
+
+
+def test_create_unknown_image_raises_docker_error_no_such_image(profile):
+    profile.docker_image = 'unknown_image:tag'
+
+    with pytest.raises(DockerError) as excinfo:
+        create(profile.name)
+
+    error = str(excinfo.value)
+    # Error message depends on whether Docker Swarm is used
+    assert any(("No such image" in error, "not found" in error))
+    assert 'unknown_image:tag' in error
+
+
+def test_start_no_stdin_data(profile):
+    command = 'echo "stdout data" && echo "stderr data" >&2'
+    sandbox = create(profile.name, command)
+
+    result = start(sandbox)
+
+    expected_result = {
+        'exit_code': 0,
+        'stdout': b'stdout data\n',
+        'stderr': b'stderr data\n',
+        'duration': ANY,
+        'timeout': False,
+        'oom_killed': False,
+    }
+    assert result == expected_result
+    assert result['duration'] > 0
+
+
+def test_start_with_stdin_data_bytes(profile):
+    sandbox = create(profile.name, 'cat')
+
+    result = start(sandbox, stdin=b'stdin data\n')
+
+    expected_result = {
+        'exit_code': 0,
+        'stdout': b'stdin data\n',
+        'stderr': b'',
+        'duration': ANY,
+        'timeout': False,
+        'oom_killed': False,
+    }
+    assert result == expected_result
+    assert result['duration'] > 0
+
+
+def test_start_with_stdin_data_str(profile):
+    sandbox = create(profile.name, 'cat')
+
+    result = start(sandbox, stdin="stdin data\n")
+
+    expected_result = {
+        'exit_code': 0,
+        'stdout': b'stdin data\n',
+        'stderr': b'',
+        'duration': ANY,
+        'timeout': False,
+        'oom_killed': False,
+    }
+    assert result == expected_result
+    assert result['duration'] > 0
+
+
+def test_start_same_sandbox_multiple_times(profile):
+    sandbox = create(profile.name, 'cat', limits={'cputime': 20})
+    expected_result = {
+        'exit_code': 0,
+        'stdout': b'',
+        'stderr': b'',
+        'duration': ANY,
+        'timeout': False,
+        'oom_killed': False,
+    }
+
+    result = start(sandbox)
+    assert result == expected_result
+
+    result = start(sandbox, stdin=b'stdin data')
+    assert result == dict(expected_result, stdout=b'stdin data')
+
+    long_data = b'stdin long data' + b'a b c d e\n' * 100000
+    result = start(sandbox, stdin=long_data)
+    assert result == dict(expected_result, stdout=long_data)
+
+    result = start(sandbox)
+    assert result == expected_result
+
+
+def test_destroy_not_started(profile, docker_client):
+    sandbox = create(profile.name)
+    assert docker_client.inspect_container(sandbox)
+
+    destroy(sandbox)
+
+    with pytest.raises(docker.errors.NotFound):
+        docker_client.inspect_container(sandbox)
+
+
+def test_destroy_exited(profile, docker_client):
+    sandbox = create(profile.name, 'true')
+    result = start(sandbox)
+    assert result['exit_code'] == 0
+    assert docker_client.inspect_container(sandbox)
+
+    destroy(sandbox)
+
+    with pytest.raises(docker.errors.NotFound):
+        docker_client.inspect_container(sandbox)
+
+
+def test_destroy_running(profile, docker_client):
+    sandbox = create(profile.name, 'sleep 10', limits={'realtime': 1})
+    result = start(sandbox)
+    assert result['timeout'] is True
+    container_info = docker_client.inspect_container(sandbox)
+    assert container_info['State']['Running'] is True
+
+    destroy(sandbox)
+
+    with pytest.raises(docker.errors.NotFound):
+        docker_client.inspect_container(sandbox)
+
+
+def test_create_start_destroy_with_context_manager(profile, docker_client):
+    with create(profile.name, 'cat') as sandbox:
+        result = start(sandbox)
+        assert result['stdout'] == b''
+
+        result = start(sandbox, stdin=b'stdin data')
+        assert result['stdout'] == b'stdin data'
+
+    with pytest.raises(docker.errors.NotFound):
+        docker_client.inspect_container(sandbox)
 
 
 def test_run_python(profile):
-    command = 'python3 -c \'import sys; ' \
-              'print("stdout data"); print("stderr data", file=sys.stderr)\''
+    command = ('python3 -c \'import sys; '
+               'print("stdout data"); print("stderr data", file=sys.stderr)\'')
     result = run(profile.name, command)
 
     expected_result = {
@@ -164,7 +315,7 @@ def test_run_reuse_workdir(profile, docker_client):
             files=[{'name': 'file', 'content': b'first run data\n'}],
             workdir=workdir)
 
-        if utils.is_docker_swarm(docker_client):
+        if is_docker_swarm(docker_client):
             assert workdir.node
 
         result = run(profile.name, 'cat file', workdir=workdir)
@@ -173,23 +324,12 @@ def test_run_reuse_workdir(profile, docker_client):
         assert result['stdout'] == b'first run data\n'
 
 
-def test_start_sandbox_apierror_no_such_image():
-    limits = {'cputime': 1, 'realtime': 5, 'memory': 64}
-
-    with pytest.raises(DockerError) as excinfo:
-        _start_sandbox('unknown_image', 'true', limits)
-
-    error = str(excinfo.value)
-    # Error message depends on whether Docker Swarm is used
-    assert any(("No such image" in error, "not found" in error))
-
-
 def test_working_directory(docker_client):
     with working_directory() as workdir:
         assert workdir.volume.startswith('epicbox-')
         node_volume = workdir.volume
-        if utils.is_docker_swarm(docker_client):
-            node_name = utils.get_swarm_nodes(docker_client)[0]
+        if is_docker_swarm(docker_client):
+            node_name = get_swarm_nodes(docker_client)[0]
             node_volume = node_name + '/' + workdir.volume
         volume = docker_client.inspect_volume(node_volume)
         assert volume['Name'] == workdir.volume
