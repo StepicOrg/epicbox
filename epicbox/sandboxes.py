@@ -10,7 +10,7 @@ from requests.exceptions import RequestException
 
 from . import config, exceptions, utils
 
-__all__ = ['run', 'working_directory']
+__all__ = ['create', 'start', 'destroy', 'run', 'working_directory']
 
 logger = structlog.get_logger()
 
