@@ -54,4 +54,3 @@ docs/_build/
 target/
 
 .idea/*
-epicbox/settings/local.py

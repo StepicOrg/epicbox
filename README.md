@@ -27,12 +27,3 @@ the return value of the `run` command is as follows:
  'timeout': False,
  'oom_killed': False}
 ```
-
-EpicBox could be set up as a standalone RPC service, and the api of RPC client is designed to be able to be used as a drop-in replacement for direct library interaction.
-
-```python
-from epicbox.rpcapi import EpicBoxAPI
-
-epicbox = EpicBoxAPI('rabbit://guest@localhost:5672//')
-epicbox.run('base', 'ps aux')
-```

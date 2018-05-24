@@ -5,17 +5,12 @@ import structlog
 
 import epicbox
 from epicbox import sandboxes
-from epicbox.rpcapi import EpicBoxAPI
 from epicbox.utils import get_docker_client
 
 
 def pytest_addoption(parser):
     parser.addoption('--docker-url', action='store', default=None,
                      help="Use this url to connect to a Docker backend server")
-    parser.addoption('--rpc-url', action='store', default=None,
-                     help="Use real RPC server transport for functional tests")
-    parser.addoption('--base-workdir', action='store', default=None,
-                     help="Base working directory for temporary sandboxes")
 
 
 @pytest.fixture(scope='session')
@@ -47,10 +42,9 @@ def profile_read_only(docker_image):
 
 
 @pytest.fixture(autouse=True)
-def configure(profile, profile_read_only, docker_url, base_workdir):
+def configure(profile, profile_read_only, docker_url):
     epicbox.configure(profiles=[profile, profile_read_only],
-                      docker_url=docker_url,
-                      base_workdir=base_workdir)
+                      docker_url=docker_url)
     structlog.configure(
         processors=[
             structlog.processors.TimeStamper(fmt='iso'),
@@ -79,20 +73,3 @@ def test_utils(docker_client, docker_image):
             return docker_client.create_container(docker_image, **kwargs)
 
     return TestUtils()
-
-
-@pytest.fixture
-def rpc_transport_url(request):
-    return request.config.getoption('rpc_url')
-
-
-@pytest.fixture
-def rpcepicbox(rpc_transport_url):
-    if rpc_transport_url:
-        return EpicBoxAPI(rpc_transport_url)
-    return EpicBoxAPI(None, fake_server=True)
-
-
-@pytest.fixture
-def base_workdir(request):
-    return request.config.getoption('base_workdir')

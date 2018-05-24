@@ -1,3 +1,0 @@
--r base.txt
-
-git+https://github.com/StepicOrg/oslo.messaging.git

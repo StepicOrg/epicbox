@@ -1,6 +1,0 @@
-#!/bin/bash
-basedir=$(basename "$1")
-if [[ "$basedir" == sandbox-* ]]; then
-    echo "Cleaning up sandbox working directory: $1"
-    exec rm -rf "$1"/*
-fi
