@@ -271,11 +271,11 @@ def test_run_network_disabled(profile):
 def test_run_network_enabled(profile):
     profile.network_disabled = False
 
-    result = run(profile.name, 'curl -I https://google.com',
+    result = run(profile.name, 'curl -I https://httpbin.org/status/200',
                  limits={'realtime': 15})
 
     assert result['exit_code'] == 0
-    assert b'302 Found' in result['stdout']
+    assert b'200 OK' in result['stdout']
 
 
 def test_run_upload_files(profile):
