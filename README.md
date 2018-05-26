@@ -1,4 +1,6 @@
 # EpicBox
+[![Build Status](https://travis-ci.org/StepicOrg/epicbox.svg?branch=master)](https://travis-ci.org/StepicOrg/epicbox)
+
 EpicBox runs untrusted code in secure Docker based sandboxes.
 
 ## Requirements
