@@ -38,6 +38,7 @@ The `result` value is:
  'oom_killed': False}
 ```
 
+### Advanced usage
 A more advanced usage example of `epicbox` is to compile a C++ program and then
 run it multiple times on different input data.  In this example `epicbox` will
 run containers on a dedicated [Docker Swarm](https://docs.docker.com/swarm/overview/)
