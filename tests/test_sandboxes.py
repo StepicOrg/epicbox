@@ -338,6 +338,18 @@ def test_working_directory(docker_client):
         docker_client.inspect_volume(node_volume)
 
 
+def test_working_directory_cleanup_on_exception(docker_client):
+    with pytest.raises(Exception):
+        with working_directory() as workdir:
+            volume = docker_client.inspect_volume(workdir.volume)
+            assert volume['Name'] == workdir.volume
+
+            raise Exception("An error occurred while using a workdir")
+
+    with pytest.raises(docker.errors.NotFound):
+        docker_client.inspect_volume(workdir.volume)
+
+
 def test_write_files(docker_client, docker_image):
     command = ('/bin/bash -c '
                '"stat -c %a /sandbox && ls -1 /sandbox && cat /sandbox/*"')

@@ -240,18 +240,18 @@ def working_directory():
         log.exception("Failed to create a docker volume")
         raise exceptions.DockerError(str(e))
     log.info("New docker volume is created")
-
-    yield _WorkingDirectory(volume=volume_name, node=None)
-
-    log.info("Removing the docker volume")
     try:
-        docker_client.remove_volume(volume_name)
-    except NotFound:
-        log.warning("Failed to remove the docker volume, it doesn't exist")
-    except (RequestException, DockerException) as e:
-        log.exception("Failed to remove the docker volume")
-    else:
-        log.info("Docker volume removed")
+        yield _WorkingDirectory(volume=volume_name, node=None)
+    finally:  # Ensure that volume cleanup takes place
+        log.info("Removing the docker volume")
+        try:
+            docker_client.remove_volume(volume_name)
+        except NotFound:
+            log.warning("Failed to remove the docker volume, it doesn't exist")
+        except (RequestException, DockerException) as e:
+            log.exception("Failed to remove the docker volume")
+        else:
+            log.info("Docker volume removed")
 
 
 def _write_files(container, files):
