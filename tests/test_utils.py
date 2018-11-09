@@ -73,5 +73,5 @@ def test_docker_communicate_timeout_reached(test_utils, docker_client):
     with pytest.raises(TimeoutError):
         docker_communicate(container, timeout=1)
 
-    container_info = docker_client.inspect_container(container)
-    assert container_info['State']['Running']
+    container.reload()
+    assert container.status == 'running'

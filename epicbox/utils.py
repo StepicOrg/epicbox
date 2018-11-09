@@ -11,7 +11,7 @@ import docker
 import structlog
 from docker import constants as docker_consts
 from docker.errors import DockerException
-from docker.utils import Ulimit
+from docker.types import Ulimit
 from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from requests.packages.urllib3.util.retry import Retry
@@ -30,8 +30,8 @@ def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
                       retry_status_forcelist=(500,)):
     client_key = (retry_read, retry_status_forcelist)
     if client_key not in _DOCKER_CLIENTS:
-        client = docker.Client(base_url=base_url or config.DOCKER_URL,
-                               timeout=config.DOCKER_TIMEOUT)
+        client = docker.DockerClient(base_url=base_url or config.DOCKER_URL,
+                                     timeout=config.DOCKER_TIMEOUT)
         retries = Retry(total=config.DOCKER_MAX_TOTAL_RETRIES,
                         connect=config.DOCKER_MAX_CONNECT_RETRIES,
                         read=retry_read,
@@ -40,7 +40,7 @@ def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
                         backoff_factor=config.DOCKER_BACKOFF_FACTOR,
                         raise_on_status=False)
         http_adapter = HTTPAdapter(max_retries=retries)
-        client.mount('http://', http_adapter)
+        client.api.mount('http://', http_adapter)
         _DOCKER_CLIENTS[client_key] = client
     return _DOCKER_CLIENTS[client_key]
 
@@ -50,35 +50,33 @@ def inspect_container_node(container):
     # on container creation.
     docker_client = get_docker_client(retry_status_forcelist=(404, 500))
     try:
-        container_info = docker_client.inspect_container(container)
+        container = docker_client.containers.get(container.id)
     except (RequestException, DockerException) as e:
-        logger.exception("Failed to inspect the container",
-                         container=container)
+        logger.exception("Failed to get the container", container=container)
         raise exceptions.DockerError(str(e))
-    if 'Node' not in container_info:
+    if 'Node' not in container.attrs:
         # Remote Docker side is not a Docker Swarm cluster
         return None
-    return container_info['Node']['Name']
+    return container.attrs['Node']['Name']
 
 
-def inspect_container_state(container):
-    docker_client = get_docker_client()
+def inspect_exited_container_state(container):
     try:
-        container_info = docker_client.inspect_container(container)
+        container.reload()
     except (RequestException, DockerException) as e:
-        logger.exception("Failed to inspect the container",
+        logger.exception("Failed to load the container from the Docker engine",
                          container=container)
         raise exceptions.DockerError(str(e))
-    started_at = dateutil.parser.parse(container_info['State']['StartedAt'])
-    finished_at = dateutil.parser.parse(container_info['State']['FinishedAt'])
+    started_at = dateutil.parser.parse(container.attrs['State']['StartedAt'])
+    finished_at = dateutil.parser.parse(container.attrs['State']['FinishedAt'])
     duration = finished_at - started_at
     duration_seconds = duration.total_seconds()
     if duration_seconds < 0:
         duration_seconds = -1
     return {
-        'exit_code': container_info['State']['ExitCode'],
+        'exit_code': container.attrs['State']['ExitCode'],
         'duration': duration_seconds,
-        'oom_killed': container_info['State'].get('OOMKilled', False),
+        'oom_killed': container.attrs['State'].get('OOMKilled', False),
     }
 
 
@@ -155,7 +153,7 @@ def docker_communicate(container, stdin=None, start_container=True,
     Interact with the container: Start it if required. Send data to stdin.
     Read data from stdout and stderr, until end-of-file is reached.
 
-    :param container: A container to interact with.
+    :param Container container: A container to interact with.
     :param bytes stdin: The data to be sent to the standard input of the
                         container, or `None`, if no data should be sent.
     :param bool start_container: Whether to start the container after
@@ -183,7 +181,7 @@ def docker_communicate(container, stdin=None, start_container=True,
         'stream': 1,
         'logs': 0,
     }
-    sock = docker_client.attach_socket(container, params=params)
+    sock = docker_client.api.attach_socket(container.id, params=params)
     sock._sock.setblocking(False)  # Make socket non-blocking
     log.info("Attached to the container", params=params, fd=sock.fileno(),
              timeout=timeout)
@@ -192,7 +190,7 @@ def docker_communicate(container, stdin=None, start_container=True,
                   "of the socket.")
         sock._sock.shutdown(socket.SHUT_WR)
     if start_container:
-        docker_client.start(container)
+        container.start()
         log.info("Container started")
 
     stream_data = b''

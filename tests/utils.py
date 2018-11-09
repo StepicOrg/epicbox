@@ -1,5 +1,5 @@
 def is_docker_swarm(client):
-    """Check if the client connected to a Docker Swarm cluster."""
+    """Check if the client is connected to a Docker Swarm cluster."""
     docker_version = client.version()['Version']
     return docker_version.startswith('swarm')
 

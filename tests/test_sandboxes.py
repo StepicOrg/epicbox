@@ -5,7 +5,7 @@ from unittest.mock import ANY
 import docker.errors
 import pytest
 
-from epicbox import config
+from epicbox import config, utils
 from epicbox.exceptions import DockerError
 from epicbox.sandboxes import (create, destroy, run, start, working_directory,
                                _write_files)
@@ -13,29 +13,31 @@ from .utils import is_docker_swarm, get_swarm_nodes
 
 
 def test_create(profile, docker_client):
-    test_containers = docker_client.containers(
+    test_containers = docker_client.containers.list(
         filters={'name': 'epicbox-test-'}, all=True)
     assert test_containers == []
 
     sandbox = create(profile.name, 'true')
 
-    container = docker_client.inspect_container(sandbox)
-    assert container['Name'].startswith('/epicbox-test-')
-    assert container['State']['Status'] == 'created'
-    assert 'true' in container['Args']
-    assert sandbox['RealtimeLimit'] == 5
+    container = docker_client.containers.get(sandbox.container.id)
+    assert container.name.startswith('epicbox-test-')
+    assert container.status == 'created'
+    assert 'true' in container.attrs['Args']
+    assert sandbox.realtime_limit == 5
 
 
-def test_create_unknown_image_raises_docker_error_no_such_image(profile):
-    profile.docker_image = 'unknown_image:tag'
+def test_create_unknown_image_raises_docker_error_no_such_image(
+        profile_unknown_image, config):
+    utils._DOCKER_CLIENTS = {}  # clear clients cache
+    config.DOCKER_MAX_TOTAL_RETRIES = 0
 
     with pytest.raises(DockerError) as excinfo:
-        create(profile.name)
+        create(profile_unknown_image.name)
 
     error = str(excinfo.value)
     # Error message depends on whether Docker Swarm is used
-    assert any(("No such image" in error, "not found" in error))
-    assert 'unknown_image:tag' in error
+    assert any(("No such image" in error, "not exist" in error))
+    assert 'unknown_image' in error
 
 
 def test_start_no_stdin_data(profile):
@@ -117,37 +119,37 @@ def test_start_same_sandbox_multiple_times(profile):
 
 def test_destroy_not_started(profile, docker_client):
     sandbox = create(profile.name)
-    assert docker_client.inspect_container(sandbox)
+    assert docker_client.containers.get(sandbox.container.id)
 
     destroy(sandbox)
 
     with pytest.raises(docker.errors.NotFound):
-        docker_client.inspect_container(sandbox)
+        docker_client.containers.get(sandbox.container.id)
 
 
 def test_destroy_exited(profile, docker_client):
     sandbox = create(profile.name, 'true')
     result = start(sandbox)
     assert result['exit_code'] == 0
-    assert docker_client.inspect_container(sandbox)
+    assert docker_client.containers.get(sandbox.container.id)
 
     destroy(sandbox)
 
     with pytest.raises(docker.errors.NotFound):
-        docker_client.inspect_container(sandbox)
+        docker_client.containers.get(sandbox.container.id)
 
 
 def test_destroy_running(profile, docker_client):
     sandbox = create(profile.name, 'sleep 10', limits={'realtime': 1})
     result = start(sandbox)
     assert result['timeout'] is True
-    container_info = docker_client.inspect_container(sandbox)
-    assert container_info['State']['Running'] is True
+    container = docker_client.containers.get(sandbox.container.id)
+    assert container.status == 'running'
 
     destroy(sandbox)
 
     with pytest.raises(docker.errors.NotFound):
-        docker_client.inspect_container(sandbox)
+        docker_client.containers.get(sandbox.container.id)
 
 
 def test_create_start_destroy_with_context_manager(profile, docker_client):
@@ -159,7 +161,7 @@ def test_create_start_destroy_with_context_manager(profile, docker_client):
         assert result['stdout'] == b'stdin data'
 
     with pytest.raises(docker.errors.NotFound):
-        docker_client.inspect_container(sandbox)
+        docker_client.containers.get(sandbox.container.id)
 
 
 def test_run_python(profile):
@@ -331,23 +333,23 @@ def test_working_directory(docker_client):
         if is_docker_swarm(docker_client):
             node_name = get_swarm_nodes(docker_client)[0]
             node_volume = node_name + '/' + workdir.volume
-        volume = docker_client.inspect_volume(node_volume)
-        assert volume['Name'] == workdir.volume
+        volume = docker_client.volumes.get(node_volume)
+        assert volume.name == workdir.volume
 
     with pytest.raises(docker.errors.NotFound):
-        docker_client.inspect_volume(node_volume)
+        docker_client.volumes.get(node_volume)
 
 
 def test_working_directory_cleanup_on_exception(docker_client):
     with pytest.raises(Exception):
         with working_directory() as workdir:
-            volume = docker_client.inspect_volume(workdir.volume)
-            assert volume['Name'] == workdir.volume
+            volume = docker_client.volumes.get(workdir.volume)
+            assert volume.name == workdir.volume
 
             raise Exception("An error occurred while using a workdir")
 
     with pytest.raises(docker.errors.NotFound):
-        docker_client.inspect_volume(workdir.volume)
+        docker_client.volumes.get(workdir.volume)
 
 
 def test_write_files(docker_client, docker_image):
@@ -355,10 +357,10 @@ def test_write_files(docker_client, docker_image):
                '"stat -c %a /sandbox && ls -1 /sandbox && cat /sandbox/*"')
     name = 'epicbox-test-' + str(uuid.uuid4())
     working_dir = config.DOCKER_WORKDIR
-    container = docker_client.create_container(docker_image,
-                                               command=command,
-                                               name=name,
-                                               working_dir=working_dir)
+    container = docker_client.containers.create(docker_image,
+                                                command=command,
+                                                name=name,
+                                                working_dir=working_dir)
     files = [
         {'name': 'main.py', 'content': b'main.py content'},
         {'name': 'file.txt', 'content': b'file.txt content'},
@@ -367,13 +369,12 @@ def test_write_files(docker_client, docker_image):
     try:
         _write_files(container, files)
 
-        docker_client.start(container)
-        docker_client.wait(container, timeout=5)
-        stdout = docker_client.logs(
-            container, stdout=True, stderr=False, stream=False)
+        container.start()
+        container.wait(timeout=5)
+        stdout = container.logs(stdout=True, stderr=False, stream=False)
         assert stdout == (b'755\n'
                           b'file.txt\n'
                           b'main.py\n'
                           b'file.txt contentmain.py content')
     finally:
-        docker_client.remove_container(container, v=True, force=True)
+        container.remove(v=True, force=True)
