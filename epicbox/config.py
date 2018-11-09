@@ -45,7 +45,7 @@ class Profile(object):
         self.network_disabled = network_disabled
 
 
-def configure(profiles=None, docker_url=None, base_workdir=None):
+def configure(profiles=None, docker_url=None):
     global IS_CONFIGURED, PROFILES, DOCKER_URL
 
     IS_CONFIGURED = True
@@ -58,6 +58,7 @@ def configure(profiles=None, docker_url=None, base_workdir=None):
     DOCKER_URL = docker_url
 
 
+# structlog.is_configured() was added in 18.1
 if not structlog._config._CONFIG.is_configured:
     structlog.configure(
         processors=[
