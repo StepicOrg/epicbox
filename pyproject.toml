@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "epicbox"
-version = "0.6.2"
+version = "1.0.0"
 description = "Run untrusted code in secure Docker based sandboxes"
 authors = ["Pavel Sviderski <ps@stepik.org>"]
 license = "MIT"
