@@ -27,11 +27,12 @@ ERRNO_RECOVERABLE = (errno.EINTR, errno.EDEADLK, errno.EWOULDBLOCK)
 
 
 def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
-                      retry_status_forcelist=(500,)):
+                      retry_status_forcelist=(500,), tls=False):
     client_key = (retry_read, retry_status_forcelist)
     if client_key not in _DOCKER_CLIENTS:
         client = docker.DockerClient(base_url=base_url or config.DOCKER_URL,
-                                     timeout=config.DOCKER_TIMEOUT)
+                                     timeout=config.DOCKER_TIMEOUT,
+                                     tls=tls or config.DOCKER_TLS_CONFIG)
         retries = Retry(total=config.DOCKER_MAX_TOTAL_RETRIES,
                         connect=config.DOCKER_MAX_CONNECT_RETRIES,
                         read=retry_read,

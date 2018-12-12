@@ -16,6 +16,7 @@ DOCKER_MAX_CONNECT_RETRIES = 5
 DOCKER_MAX_READ_RETRIES = 5
 DOCKER_BACKOFF_FACTOR = 0.2
 DOCKER_WORKDIR = '/sandbox'
+DOCKER_TLS_CONFIG = False
 
 DEFAULT_LIMITS = {
     # CPU time in seconds, None for unlimited
@@ -45,8 +46,8 @@ class Profile(object):
         self.network_disabled = network_disabled
 
 
-def configure(profiles=None, docker_url=None):
-    global IS_CONFIGURED, PROFILES, DOCKER_URL
+def configure(profiles=None, docker_url=None, tls=False):
+    global IS_CONFIGURED, PROFILES, DOCKER_URL, DOCKER_TLS_CONFIG
 
     IS_CONFIGURED = True
     if isinstance(profiles, dict):
@@ -56,6 +57,7 @@ def configure(profiles=None, docker_url=None):
         profiles_map = {profile.name: profile for profile in profiles or []}
     PROFILES.update(profiles_map)
     DOCKER_URL = docker_url
+    DOCKER_TLS_CONFIG = tls
 
 
 # structlog.is_configured() was added in 18.1
