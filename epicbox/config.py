@@ -25,10 +25,8 @@ DEFAULT_LIMITS = {
     # Memory in megabytes, None for unlimited
     'memory': 64,
 
-    # Allow user process to fork
-    #'canfork': False,
-    # Limiting the maximum number of user processes in Linux is tricky.
-    # http://unix.stackexchange.com/questions/55319/are-limits-conf-values-applied-on-a-per-process-basis
+    # limit user pids to 20 by default, -1 or None for unlimited
+    'pids-limit': 20,
 }
 DEFAULT_USER = 'root'
 CPU_TO_REAL_TIME_FACTOR = 5

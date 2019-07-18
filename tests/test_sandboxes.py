@@ -263,6 +263,24 @@ def test_run_fork_limit(profile):
     assert b'fork: retry: No child processes' in result['stderr']
 
 
+def test_fork_exceed_pids_limit(profile):
+    result = run(profile.name, 'for x in {0..10}; do sleep 1 & done', limits={'pids-limit': 10})
+    assert not result['exit_code']  # forked subprocess fail but main process ok
+    assert b"Resource temporarily unavailable" in result['stderr']
+
+
+def test_fork_in_defaults_pids_limit(profile):
+    result = run(profile.name, 'for x in {0..10}; do sleep 1 & done', limits=None)
+    assert not result['exit_code']
+
+
+def test_without_pids_limit(profile):
+    result = run(profile.name, 'for x in {0..100}; do sleep 1 & done', limits={'pids-limit': None})
+    assert not result['exit_code']
+    result = run(profile.name, 'for x in {0..100}; do sleep 1 & done', limits={'pids-limit': -1})
+    assert not result['exit_code']
+
+
 def test_run_network_disabled(profile):
     result = run(profile.name, 'curl -I https://google.com')
 
