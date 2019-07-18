@@ -38,6 +38,24 @@ The `result` value is:
  'oom_killed': False}
 ```
 
+### Avaiable Limit Options
+
+The avaiable limit options and default values:
+
+```
+DEFAULT_LIMITS = {
+    # CPU time in seconds, None for unlimited
+    'cputime': 1,
+    # Real time in seconds, None for unlimited
+    'realtime': 5,
+    # Memory in megabytes, None for unlimited
+    'memory': 64,
+
+    # limit user pids to 20 by default, -1 or None for unlimited
+    'pids-limit': 20,
+}
+```
+
 ### Advanced usage
 A more advanced usage example of `epicbox` is to compile a C++ program and then
 run it multiple times on different input data.  In this example `epicbox` will
