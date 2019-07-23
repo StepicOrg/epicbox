@@ -255,14 +255,6 @@ def test_run_read_only_file_system(profile_read_only):
     assert b'Read-only file system' in result['stderr']
 
 
-@pytest.mark.skipif('True')
-def test_run_fork_limit(profile):
-    result = run(profile.name, 'ls &', limits={'cputime': 30})
-
-    assert result['exit_code']
-    assert b'fork: retry: No child processes' in result['stderr']
-
-
 def test_fork_exceed_processes_limit(profile):
     result = run(profile.name, 'for x in {0..10}; do sleep 1 & done', limits={'processes': 10})
     assert not result['exit_code']  # forked subprocess fail but main process ok
