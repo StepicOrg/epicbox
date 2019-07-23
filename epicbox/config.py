@@ -24,9 +24,9 @@ DEFAULT_LIMITS = {
     'realtime': 5,
     # Memory in megabytes, None for unlimited
     'memory': 64,
-
-    # limit user pids to 20 by default, -1 or None for unlimited
-    'pids-limit': 20,
+    # limit the max processes the sandbox can have
+    # -1 or None for unlimited(default)
+    'processes': -1,
 }
 DEFAULT_USER = 'root'
 CPU_TO_REAL_TIME_FACTOR = 5

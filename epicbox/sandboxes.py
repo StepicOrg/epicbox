@@ -126,7 +126,7 @@ def _create_sandbox_container(sandbox_id, image, command, limits, workdir=None,
                                             memswap_limit=mem_limit,
                                             ulimits=ulimits,
                                             # limit pid
-                                            pids_limit=limits["pids-limit"],
+                                            pids_limit=limits["processes"],
                                             # Disable the logging driver
                                             log_config={'type': 'none'})
     except (RequestException, DockerException) as e:
