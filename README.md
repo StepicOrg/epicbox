@@ -38,7 +38,7 @@ The `result` value is:
  'oom_killed': False}
 ```
 
-### Avaiable Limit Options
+### Available Limit Options
 
 The avaiable limit options and default values:
 
