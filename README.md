@@ -40,7 +40,7 @@ The `result` value is:
 
 ### Available Limit Options
 
-The avaiable limit options and default values:
+The available limit options and default values:
 
 ```
 DEFAULT_LIMITS = {
