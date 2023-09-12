@@ -35,7 +35,6 @@ def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
         retries = Retry(total=config.DOCKER_MAX_TOTAL_RETRIES,
                         connect=config.DOCKER_MAX_CONNECT_RETRIES,
                         read=retry_read,
-                        method_whitelist=False,
                         status_forcelist=retry_status_forcelist,
                         backoff_factor=config.DOCKER_BACKOFF_FACTOR,
                         raise_on_status=False)

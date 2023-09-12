@@ -12,15 +12,15 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.4"
-docker = ">=2"
+python = "^3.11"
+docker = ">=6.1.3"
 python-dateutil = "^2.4"
-requests = "^2.14.2"
-structlog = ">=15.3"
+requests = "^2.31.0"
+structlog = ">=23.1.0"
 
 [tool.poetry.dev-dependencies]
-pytest = "^3.10"
+pytest = "^7.4.2"
 
 [build-system]
-requires = ["poetry>=0.12"]
-build-backend = "poetry.masonry.api"
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

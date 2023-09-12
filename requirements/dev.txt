@@ -1,3 +1,0 @@
--r base.txt
-
-pytest~=3.10

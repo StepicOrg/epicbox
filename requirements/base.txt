@@ -1,4 +1,0 @@
-docker>=2
-python-dateutil~=2.4
-requests~=2.14
-structlog>=15.3
