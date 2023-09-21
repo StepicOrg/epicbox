@@ -14,26 +14,28 @@ and limit the CPU, memory, disk, and network usage for the running process.
 Run a simple Python script in a one-time Docker container using the
 [`python:3.6.5-alpine`](https://hub.docker.com/_/python/) image:
 ```python
-import epicbox
+from epicbox import configure, Profile, run
 
-epicbox.configure(
+configure(
     profiles=[
-        epicbox.Profile('python', 'python:3.6.5-alpine')
+        Profile('python', 'python:3.6.5-alpine')
     ]
 )
 files = [{'name': 'main.py', 'content': b'print(42)'}]
 limits = {'cputime': 1, 'memory': 64}
-result = epicbox.run('python', 'python3 main.py', files=files, limits=limits)
+result = run('python', 'python3 main.py', files=files, limits=limits)
 
 ```
 The `result` value is:
 ```python
-{'exit_code': 0,
- 'stdout': b'42\n',
- 'stderr': b'',
- 'duration': 0.143358,
- 'timeout': False,
- 'oom_killed': False}
+{
+    'exit_code': 0,
+    'stdout': b'42\n',
+    'stderr': b'',
+    'duration': 0.143358,
+    'timeout': False,
+    'oom_killed': False
+}
 ```
 
 ### Available Limit Options

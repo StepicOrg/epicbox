@@ -1,77 +1,90 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pytest
 
 from epicbox.utils import docker_communicate
 
+if TYPE_CHECKING:
+    from docker import DockerClient
 
-def test_docker_communicate_empty_input_empty_output(test_utils):
-    container = test_utils.create_test_container(command='true')
-
-    stdout, stderr = docker_communicate(container)
-
-    assert stdout == b''
-    assert stderr == b''
+    from tests.conftest import BaseTestUtils
 
 
-def test_docker_communicate_empty_input_closed_stdin(test_utils):
-    container = test_utils.create_test_container(command='cat',
-                                                 stdin_open=False)
+def test_docker_communicate_empty_input_empty_output(test_utils: BaseTestUtils) -> None:
+    container = test_utils.create_test_container(command="true")
 
     stdout, stderr = docker_communicate(container)
 
-    assert stdout == b''
-    assert stderr == b''
+    assert stdout == b""
+    assert stderr == b""
 
 
-def test_docker_communicate_only_output(test_utils):
-    container = test_utils.create_test_container(command='echo 42')
+def test_docker_communicate_empty_input_closed_stdin(test_utils: BaseTestUtils) -> None:
+    container = test_utils.create_test_container(command="cat", stdin_open=False)
 
     stdout, stderr = docker_communicate(container)
 
-    assert stdout == b'42\n'
-    assert stderr == b''
+    assert stdout == b""
+    assert stderr == b""
 
 
-def test_docker_communicate_split_output_streams(test_utils):
+def test_docker_communicate_only_output(test_utils: BaseTestUtils) -> None:
+    container = test_utils.create_test_container(command="echo 42")
+
+    stdout, stderr = docker_communicate(container)
+
+    assert stdout == b"42\n"
+    assert stderr == b""
+
+
+def test_docker_communicate_split_output_streams(test_utils: BaseTestUtils) -> None:
     container = test_utils.create_test_container(
-        command='/bin/sh -c "cat && echo error >&2"')
+        command='/bin/sh -c "cat && echo error >&2"',
+    )
 
-    stdout, stderr = docker_communicate(container, stdin=b'42\n')
+    stdout, stderr = docker_communicate(container, stdin=b"42\n")
 
-    assert stdout == b'42\n'
-    assert stderr == b'error\n'
+    assert stdout == b"42\n"
+    assert stderr == b"error\n"
 
 
-def test_docker_communicate_copy_input_to_output(test_utils):
+def test_docker_communicate_copy_input_to_output(test_utils: BaseTestUtils) -> None:
     stdin_options = [
-        b'\n\n\r\n',
-        b'Hello!',
-        b'Hello!\n',
-        b'0123456789' * 100000,
+        b"\n\n\r\n",
+        b"Hello!",
+        b"Hello!\n",
+        b"0123456789" * 100000,
     ]
     for stdin in stdin_options:
-        container = test_utils.create_test_container(command='cat')
+        container = test_utils.create_test_container(command="cat")
 
         stdout, stderr = docker_communicate(container, stdin=stdin)
 
         assert stdout == stdin
-        assert stderr == b''
+        assert stderr == b""
 
 
-def test_docker_communicate_failed_command(test_utils):
-    container = test_utils.create_test_container(command='sleep')
+def test_docker_communicate_failed_command(test_utils: BaseTestUtils) -> None:
+    container = test_utils.create_test_container(command="sleep")
 
     stdout, stderr = docker_communicate(container)
 
-    assert stdout == b''
-    assert b'missing operand' in stderr
+    assert stdout == b""
+    assert b"missing operand" in stderr
 
 
-def test_docker_communicate_timeout_reached(test_utils, docker_client):
+def test_docker_communicate_timeout_reached(
+    test_utils: BaseTestUtils,
+    docker_client: DockerClient,
+) -> None:
     container = test_utils.create_test_container(
-        command='/bin/sh -c "echo 42 && sleep 30"')
+        command='/bin/sh -c "echo 42 && sleep 30"',
+    )
 
     with pytest.raises(TimeoutError):
         docker_communicate(container, timeout=1)
 
     container.reload()
-    assert container.status == 'running'
+    assert container.status == "running"

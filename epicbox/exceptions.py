@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class EpicBoxError(Exception):
     """The base class for custom exceptions raised by epicbox."""
 
