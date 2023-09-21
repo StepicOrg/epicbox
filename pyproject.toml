@@ -5,7 +5,7 @@ description = "Run untrusted code in secure Docker based sandboxes"
 authors = ["Pavel Sviderski <ps@stepik.org>"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/StepicOrg/epicbox"
+homepage = "https://github.com/hyperskill/epicbox"
 keywords = ["docker", "sandbox"]
 classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules"
