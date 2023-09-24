@@ -255,7 +255,8 @@ def docker_communicate(
             time.sleep(0.05)
     else:
         sock.close()
-        raise TimeoutError("Container didn't terminate after timeout seconds")
+        msg = "Container didn't terminate after timeout seconds"
+        raise TimeoutError(msg)
     sock.close()
     return demultiplex_docker_stream(stream_data)
 

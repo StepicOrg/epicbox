@@ -93,11 +93,15 @@ def create(
                          docker system.
     """
     if profile_name not in config.PROFILES:
-        raise ValueError(f"Profile not found: {profile_name}")
+        msg = f"Profile not found: {profile_name}"
+        raise ValueError(msg)
     if workdir is not None and not isinstance(workdir, WorkingDirectory):
+        msg = (
+            "Invalid 'workdir', "
+            "it should be created using 'working_directory' context manager"
+        )
         raise ValueError(
-            "Invalid 'workdir', it should be created using "
-            "'working_directory' context manager",
+            msg,
         )
     sandbox_id = str(uuid.uuid4())
     profile = config.PROFILES[profile_name]
@@ -216,11 +220,8 @@ def start(sandbox: Sandbox, stdin: bytes | str | None = None) -> dict[str, Any]:
     :raises DockerError: If an error occurred with the underlying
                          docker system.
     """
-    if stdin is not None:
-        if not isinstance(stdin, bytes | str):
-            raise TypeError("'stdin' must be bytes or str")
-        if isinstance(stdin, str):
-            stdin = stdin.encode()
+    if isinstance(stdin, str):
+        stdin = stdin.encode()
     log = logger.bind(sandbox=sandbox)
     log.info("Starting the sandbox", stdin_size=len(stdin or ""))
     result = {

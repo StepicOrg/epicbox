@@ -401,7 +401,8 @@ def test_working_directory_cleanup_on_exception(docker_client: DockerClient) -> 
         volume = docker_client.volumes.get(workdir.volume)
         assert volume.name == workdir.volume
 
-        raise Exception("An error occurred while using a workdir")
+        msg = "An error occurred while using a workdir"
+        raise Exception(msg)
 
     with pytest.raises(docker.errors.NotFound):
         docker_client.volumes.get(workdir.volume)
