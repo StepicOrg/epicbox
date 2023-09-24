@@ -296,6 +296,7 @@ def test_fork_exceed_processes_limit(profile: Profile) -> None:
 def test_fork_in_defaults_processes_limit(profile: Profile) -> None:
     result = run(profile.name, "for x in {0..10}; do sleep 1 & done", limits=None)
     assert not result["exit_code"]
+    assert not result["stderr"]
 
 
 def test_without_processes_limit(profile: Profile) -> None:
@@ -305,19 +306,21 @@ def test_without_processes_limit(profile: Profile) -> None:
         limits={"processes": None},
     )
     assert not result["exit_code"]
+    assert not result["stderr"]
     result = run(
         profile.name,
         "for x in {0..100}; do sleep 1 & done",
         limits={"processes": -1},
     )
     assert not result["exit_code"]
+    assert not result["stderr"]
 
 
 def test_run_network_disabled(profile: Profile) -> None:
-    result = run(profile.name, "curl -I https://google.com")
+    result = run(profile.name, "wget https://google.com")
 
     assert result["exit_code"]
-    assert b"Could not resolve host" in result["stderr"]
+    assert b"unable to resolve host address" in result["stderr"]
 
 
 def test_run_network_enabled(profile: Profile) -> None:
