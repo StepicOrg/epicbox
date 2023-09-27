@@ -1,0 +1,22 @@
+name: Deploy
+on:
+  push:
+    branches:
+      - 'master'
+  pull_request:
+
+jobs:
+  tests:
+     name: Tests
+     runs-on: [self-hosted, small]
+     steps:
+       - uses: actions/checkout@v2
+       - uses: ./.github/workflows/actions/prepare
+       - name: Login to Docker Hub
+         uses: docker/login-action@v2
+         with:
+           registry: hyperskill.azurecr.io
+           username: ${{ secrets.REGISTRY_USER }}
+           password: ${{ secrets.REGISTRY_PASSWORD }}
+       - run: docker pull hyperskill.azurecr.io/epicbox/python:3.10.6-2d0d17450
+       - run: poetry run pytest .

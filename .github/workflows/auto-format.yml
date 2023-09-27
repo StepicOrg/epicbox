@@ -1,0 +1,29 @@
+name: Format code
+on:
+  - pull_request
+  - push:
+      branch: master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    name: Format with black and ruff
+    runs-on: [self-hosted, small]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: ./.github/workflows/actions/prepare
+      - run: poetry run black .
+      - run: poetry run ruff --fix --exit-zero .
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          fetch: false
+          default_author: github_actions
+          message: 'Auto format'
+          add: '.'
