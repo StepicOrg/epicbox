@@ -14,7 +14,7 @@ from docker.errors import DockerException
 from docker.types import Ulimit
 from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
-from requests.packages.urllib3.util.retry import Retry
+from urllib3.util.retry import Retry
 
 from . import config, exceptions
 
@@ -26,6 +26,12 @@ _DOCKER_CLIENTS = {}
 ERRNO_RECOVERABLE = (errno.EINTR, errno.EDEADLK, errno.EWOULDBLOCK)
 
 
+if hasattr(Retry.DEFAULT, 'allowed_methods'):
+    _ANY_METHOD = {'allowed_methods': False}
+else:
+    _ANY_METHOD = {'method_whitelist': False}
+
+
 def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
                       retry_status_forcelist=(500,)):
     client_key = (retry_read, retry_status_forcelist)
@@ -35,10 +41,10 @@ def get_docker_client(base_url=None, retry_read=config.DOCKER_MAX_READ_RETRIES,
         retries = Retry(total=config.DOCKER_MAX_TOTAL_RETRIES,
                         connect=config.DOCKER_MAX_CONNECT_RETRIES,
                         read=retry_read,
-                        method_whitelist=False,
                         status_forcelist=retry_status_forcelist,
                         backoff_factor=config.DOCKER_BACKOFF_FACTOR,
-                        raise_on_status=False)
+                        raise_on_status=False,
+                        **_ANY_METHOD)
         http_adapter = HTTPAdapter(max_retries=retries)
         client.api.mount('http://', http_adapter)
         _DOCKER_CLIENTS[client_key] = client
