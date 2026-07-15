@@ -1,6 +1,14 @@
 Changelog
 =========
 
+1.1.1 (2025-03-20)
+-----------------
+
+Fixes
+^^^^^
+
+* Fixed deprecated parameter `method_whitelist` for urllib3.
+
 1.1.0 (2019-07-29)
 ------------------
 
