@@ -199,7 +199,7 @@ def docker_communicate(container, stdin=None, start_container=True,
         container.start()
         log.info("Container started")
 
-    stream_data = b''
+    stream_data = bytearray()
     start_time = time.time()
     while timeout is None or time.time() - start_time < timeout:
         read_ready, write_ready, _ = select.select([sock], [sock], [], 1)
@@ -215,7 +215,7 @@ def docker_communicate(container, stdin=None, start_container=True,
             if data is None:
                 log.debug("Container output reached EOF. Closing the socket")
                 break
-            stream_data += data
+            stream_data.extend(data)
 
         if write_ready and stdin:
             is_io_active = True
