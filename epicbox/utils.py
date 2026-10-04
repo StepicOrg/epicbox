@@ -178,6 +178,8 @@ def docker_communicate(container, stdin=None, start_container=True,
     # is called immediately after the container is created.
     docker_client = get_docker_client(retry_status_forcelist=(404, 500))
     log = logger.bind(container=container)
+    if stdin:
+        stdin = memoryview(stdin)
     params = {
         # Attach to stdin even if there is nothing to send to it to be able
         # to properly close it (stdin of the container is always open).
