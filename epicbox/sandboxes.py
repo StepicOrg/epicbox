@@ -134,7 +134,11 @@ def _create_sandbox_container(sandbox_id, image, command, limits, workdir=None,
             # This may happen because of retries, it's a recoverable error
             log.info("The container with the given name is already created",
                      name=name)
-            c = {'Id': name}
+            try:
+                c = docker_client.containers.get(name)
+            except (RequestException, DockerException) as lookup_error:
+                log.exception("Failed to get the existing sandbox container")
+                raise exceptions.DockerError(str(lookup_error))
         else:
             log.exception("Failed to create a sandbox container")
             raise exceptions.DockerError(str(e))
