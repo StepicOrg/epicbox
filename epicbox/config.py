@@ -20,7 +20,7 @@ DOCKER_WORKDIR = '/sandbox'
 DEFAULT_LIMITS = {
     # CPU time in seconds, None for unlimited
     'cputime': 1,
-    # Real time in seconds, None for unlimited
+    # Real time in seconds; sandbox requests with None use this finite default
     'realtime': 5,
     # Memory in megabytes, None for unlimited
     'memory': 64,

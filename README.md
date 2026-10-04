@@ -46,7 +46,7 @@ The available limit options and default values:
 DEFAULT_LIMITS = {
     # CPU time in seconds, None for unlimited
     'cputime': 1,
-    # Real time in seconds, None for unlimited
+    # Real time in seconds, None uses the default realtime limit (5 seconds)
     'realtime': 5,
     # Memory in megabytes, None for unlimited
     'memory': 64,
