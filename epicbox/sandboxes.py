@@ -72,17 +72,21 @@ def create(profile_name, command=None, files=None, limits=None, workdir=None):
                                   workdir=workdir, user=profile.user,
                                   read_only=profile.read_only,
                                   network_disabled=profile.network_disabled)
-    if workdir and not workdir.node:
-        node_name = utils.inspect_container_node(c)
-        if node_name:
-            # Assign a Swarm node name to the working directory to run
-            # subsequent containers on this same node.
-            workdir.node = node_name
-            logger.info("Assigned Swarm node to the working directory",
-                        workdir=workdir)
-    if files:
-        _write_files(c, files)
     sandbox = Sandbox(sandbox_id, c, realtime_limit=limits['realtime'])
+    try:
+        if workdir and not workdir.node:
+            node_name = utils.inspect_container_node(c)
+            if node_name:
+                # Assign a Swarm node name to the working directory to run
+                # subsequent containers on this same node.
+                workdir.node = node_name
+                logger.info("Assigned Swarm node to the working directory",
+                            workdir=workdir)
+        if files:
+            _write_files(c, files)
+    except BaseException:
+        destroy(sandbox)
+        raise
     logger.info("Sandbox created and ready to start", sandbox=sandbox)
     return sandbox
 
